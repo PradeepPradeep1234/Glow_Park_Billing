@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bill - {{ customer.name }}</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <style>
+        body { background: #f5f7fb; }
+
+        .bill-card {
+            max-width: 600px;
+            margin: auto;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+
+        .bill-header {
+            background: #ff4da6;
+            color: white;
+            border-radius: 15px 15px 0 0;
+            padding: 20px;
+        }
+
+        .bill-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .bill-item:last-child { border-bottom: none; }
+
+        .treatment-badge {
+            display: inline-block;
+            background: #fff3f9;
+            border: 1px solid #ff4da6;
+            color: #ff4da6;
+            border-radius: 20px;
+            padding: 2px 10px;
+            font-size: 13px;
+            margin: 2px;
+        }
+
+        .total-row {
+            background: #fff3f9;
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-top: 10px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 18px;
+            font-weight: bold;
+            color: #ff4da6;
+        }
+
+        .action-btns a,
+        .action-btns button { margin: 5px; }
+    </style>
+</head>
+
+<body>
+
+<div class="container py-5">
+    <div class="card bill-card">
+
+        <!-- Header -->
+        <div class="bill-header text-center">
+            <h3>✨ Glow Park</h3>
+            <p class="mb-0">Bill Generated Successfully</p>
+            <small>{{ customer.visit_date.strftime('%d %B %Y, %I:%M %p') }}</small>
+        </div>
+
+        <div class="card-body">
+
+            <!-- Customer Info -->
+            <div class="bill-item">
+                <strong>Name</strong>
+                <span>{{ customer.name }}</span>
+            </div>
+
+            <div class="bill-item">
+                <strong>Phone</strong>
+                <span>{{ customer.phone }}</span>
+            </div>
+
+            {% if customer.email %}
+            <div class="bill-item">
+                <strong>Email</strong>
+                <span>{{ customer.email }}</span>
+            </div>
+            {% endif %}
+
+            <div class="bill-item">
+                <strong>Staff</strong>
+                <span>{{ customer.staff.name if customer.staff else 'N/A' }}</span>
+            </div>
+
+            <!-- Treatments -->
+            <div class="bill-item">
+                <strong>Treatments</strong>
+                <div class="text-end">
+                    {% for t in customer.treatments %}
+                        <span class="treatment-badge">{{ t.name }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Treatment wise price breakdown -->
+            <div class="bill-item">
+                <strong>Breakdown</strong>
+                <div class="text-end">
+                    {% for t in customer.treatments %}
+                        <div class="text-muted" style="font-size:13px;">
+                            {{ t.name }} — ₹{{ t.price }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="bill-item">
+                <strong>Payment Mode</strong>
+                <span class="badge bg-dark text-uppercase">{{ customer.payment_method }}</span>
+            </div>
+
+            {% if customer.notes %}
+            <div class="bill-item">
+                <strong>Notes</strong>
+                <span class="text-muted">{{ customer.notes }}</span>
+            </div>
+            {% endif %}
+
+            <!-- Total -->
+            <div class="total-row">
+                <span>Total Amount</span>
+                <span>₹ {{ customer.total_amount }}</span>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="text-center mt-4 action-btns">
+
+                <a href="{{ url_for('download_bill', customer_id=customer.id) }}"
+                   class="btn btn-primary">
+                   ⬇ Download PDF
+                </a>
+
+                {% if customer.email %}
+                    <button onclick="sendBill({{ customer.id }})"
+                            class="btn btn-success"
+                            id="emailBtn">
+                            📧 Send Email
+                    </button>
+                {% else %}
+                    <span class="text-danger d-block mt-2" style="font-size:13px;">
+                        No email on record — cannot send
+                    </span>
+                {% endif %}
+
+                <br>
+                <a href="{{ url_for('dashboard') }}"
+                   class="btn btn-outline-secondary mt-2">
+                   ← Back to Dashboard
+                </a>
+
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+function sendBill(id) {
+    const btn = document.getElementById('emailBtn');
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
+
+    fetch(`/send-bill/${id}`)
+        .then(res => res.json())
+        .then(data => {
+            btn.textContent = '✅ Sent!';
+            btn.classList.replace('btn-success', 'btn-secondary');
+            alert(data.message);
+        })
+        .catch(() => {
+            btn.disabled = false;
+            btn.textContent = '📧 Send Email';
+            alert('Failed to send email. Try again.');
+        });
+}
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
