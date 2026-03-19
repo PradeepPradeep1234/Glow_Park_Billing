@@ -174,7 +174,7 @@ def search():
         'id': c.id,
         'name': c.name,
         'phone': c.phone,
-        'treatment': c.treatments
+        "Treatment": ", ".join([t.name for t in c.treatments])
     } for c in customers]
     
     return jsonify(results)
@@ -285,7 +285,7 @@ def generate_pdf_buffer(c):
         ["Phone",          c.phone],
         ["Email",          c.email or "—"],
         ["Age",            str(c.age) if c.age else "—"],
-        ["Treatment",      c.treatments],
+        ["Treatment", ", ".join([t.name for t in c.treatments])],
         ["Staff Handled",  c.staff.name if c.staff else "—"],
         ["Payment Method", c.payment_method.upper() if c.payment_method else "—"],
         ["Notes",          c.notes or "—"],
