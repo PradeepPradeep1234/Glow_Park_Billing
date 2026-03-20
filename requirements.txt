@@ -8,7 +8,8 @@ Flask==3.0.3
 Flask-Bcrypt==1.0.1
 Flask-Login==0.6.3
 Flask-Mail==0.10.0
-Flask-Migrate==4.1.0alembic==1.18.4
+Flask-Migrate==4.1.0
+alembic==1.18.4
 bcrypt==5.0.0
 blinker==1.8.2
 charset-normalizer==3.4.5
