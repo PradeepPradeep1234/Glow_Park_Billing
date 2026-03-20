@@ -1,0 +1,904 @@
+{% extends 'base.html' %}
+{% block title %}Analytics – Glow Park{% endblock %}
+{% block page_title %}Analytics{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/apexcharts@3.45.2/dist/apexcharts.min.js"></script>
+<style>
+  /* ══ GLOBAL PERIOD BAR ══ */
+  .period-bar {
+    display:flex; align-items:center; gap:6px;
+    background:#fff; border:1px solid var(--pink-border);
+    border-radius:14px; padding:6px 8px;
+    margin-bottom:24px; flex-wrap:wrap;
+    box-shadow:var(--shadow-sm);
+    position:relative;
+  }
+  .period-btn {
+    padding:8px 18px; border-radius:9px; font-size:13px; font-weight:600;
+    cursor:pointer; border:none; background:transparent;
+    color:var(--gray-mid); transition:all .18s; font-family:'DM Sans',sans-serif;
+    white-space:nowrap;
+  }
+  .period-btn:hover:not(.active) { background:var(--pink-pale); color:var(--pink); }
+  .period-btn.active { background:var(--pink); color:#fff; box-shadow:0 3px 12px rgba(233,30,140,.3); }
+
+  /* Custom range picker */
+  .custom-picker {
+    display:none; position:absolute; top:calc(100% + 8px); left:0; right:0;
+    background:#fff; border:1px solid var(--pink-border); border-radius:14px;
+    padding:16px 20px; box-shadow:0 12px 36px rgba(233,30,140,.15); z-index:100;
+    align-items:center; gap:10px; flex-wrap:wrap;
+  }
+  .custom-picker.show { display:flex; }
+  .cp-label { font-size:11px; font-weight:600; color:var(--gray-mid); font-family:'DM Mono',monospace; }
+  .cp-input {
+    border:1.5px solid var(--pink-border); border-radius:9px;
+    padding:8px 12px; font-size:13px; font-family:'DM Sans',sans-serif;
+    color:var(--gray-dark); outline:none; background:#fff;
+  }
+  .cp-input:focus { border-color:var(--pink); }
+  .period-label-text {
+    margin-left:auto; font-size:11px; color:var(--gray-light);
+    font-family:'DM Mono',monospace; padding:0 8px;
+  }
+
+  /* ══ STAT CARDS ══ */
+  .stat-row { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px; }
+
+  .kpi-card {
+    background:#fff; border:1px solid var(--pink-border);
+    border-radius:14px; padding:20px 22px;
+    box-shadow:var(--shadow-sm); position:relative; overflow:hidden;
+    transition:box-shadow .2s;
+  }
+  .kpi-card:hover { box-shadow:var(--shadow-md); }
+  .kpi-card::after { content:''; position:absolute; top:0; left:0; right:0; height:3px; border-radius:14px 14px 0 0; }
+  .kpi-card.kc-pink::after  { background:linear-gradient(90deg,#E91E8C,#F472B6); }
+  .kpi-card.kc-green::after { background:linear-gradient(90deg,#10B981,#34D399); }
+  .kpi-card.kc-blue::after  { background:linear-gradient(90deg,#6366F1,#818CF8); }
+  .kpi-card.kc-amber::after { background:linear-gradient(90deg,#F59E0B,#FCD34D); }
+
+  .kpi-icon { font-size:22px; margin-bottom:10px; }
+  .kpi-label { font-size:10px; font-weight:600; color:var(--gray-light); letter-spacing:1px; text-transform:uppercase; font-family:'DM Mono',monospace; margin-bottom:5px; }
+  .kpi-value { font-family:'Playfair Display',serif; font-size:26px; font-weight:700; color:var(--gray-dark); letter-spacing:-0.5px; }
+  .kpi-growth {
+    display:inline-flex; align-items:center; gap:3px;
+    font-size:12px; font-weight:700; font-family:'DM Mono',monospace;
+    padding:3px 8px; border-radius:6px; margin-top:8px;
+  }
+  .kg-up   { background:#D1FAE5; color:#065F46; }
+  .kg-down { background:#FEE2E2; color:#991B1B; }
+  .kg-flat { background:#F1F5F9; color:#475569; }
+  .kpi-sub { font-size:11px; color:var(--gray-light); margin-top:4px; }
+
+  /* ══ RETENTION STRIP ══ */
+  .retention-strip {
+    display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px;
+  }
+  .ret-card {
+    background:#fff; border:1px solid var(--pink-border); border-radius:12px;
+    padding:16px 18px; box-shadow:var(--shadow-sm);
+    display:flex; flex-direction:column; gap:4px;
+  }
+  .ret-label { font-size:10px; font-weight:600; color:var(--gray-light); letter-spacing:1px; text-transform:uppercase; font-family:'DM Mono',monospace; }
+  .ret-value { font-family:'Playfair Display',serif; font-size:22px; font-weight:700; color:var(--gray-dark); }
+  .ret-badge { display:inline-flex; align-items:center; gap:3px; font-size:11px; font-weight:700; font-family:'DM Mono',monospace; padding:2px 7px; border-radius:5px; margin-top:2px; }
+
+  /* ══ CHART LAYOUT ══ */
+  .charts-full { margin-bottom:16px; }
+  .charts-2col { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
+  .charts-3col { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-bottom:16px; }
+  .charts-wide-narrow { display:grid; grid-template-columns:3fr 2fr; gap:16px; margin-bottom:16px; }
+
+  .chart-card {
+    background:#fff; border:1px solid var(--pink-border); border-radius:16px;
+    box-shadow:var(--shadow-sm); padding:22px 24px 16px;
+    position:relative; overflow:hidden;
+  }
+  .chart-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; border-radius:16px 16px 0 0; }
+  .cc-pink::before  { background:linear-gradient(90deg,#E91E8C,#F472B6); }
+  .cc-blue::before  { background:linear-gradient(90deg,#6366F1,#818CF8); }
+  .cc-green::before { background:linear-gradient(90deg,#10B981,#34D399); }
+  .cc-amber::before { background:linear-gradient(90deg,#F59E0B,#FCD34D); }
+  .cc-teal::before  { background:linear-gradient(90deg,#06B6D4,#67E8F9); }
+  .cc-rose::before  { background:linear-gradient(90deg,#F43F5E,#FB7185); }
+
+  .chart-head { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:4px; }
+  .chart-title { font-family:'Playfair Display',serif; font-size:15px; font-weight:700; color:var(--gray-dark); }
+  .chart-sub { font-size:11px; color:var(--gray-light); font-family:'DM Mono',monospace; margin-bottom:16px; }
+
+  /* Rev toggle */
+  .rev-toggle { display:flex; background:var(--pink-pale); border:1px solid var(--pink-border); border-radius:8px; padding:3px; gap:2px; }
+  .rt-btn { padding:4px 11px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer; border:none; background:transparent; color:var(--gray-mid); font-family:'DM Sans',sans-serif; transition:all .15s; }
+  .rt-btn.active { background:#fff; color:var(--pink); box-shadow:0 1px 4px rgba(233,30,140,.15); }
+
+  /* Growth badge */
+  .growth-badge { display:inline-flex; align-items:center; gap:4px; padding:4px 10px; border-radius:8px; font-size:12px; font-weight:700; font-family:'DM Mono',monospace; }
+  .gb-up   { background:#D1FAE5; color:#065F46; }
+  .gb-down { background:#FEE2E2; color:#991B1B; }
+  .gb-flat { background:#F1F5F9; color:#475569; }
+
+  /* Donut center text */
+  .donut-wrap { position:relative; }
+  .donut-center {
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    text-align:center; pointer-events:none;
+  }
+  .donut-pct  { font-family:'Playfair Display',serif; font-size:24px; font-weight:700; color:var(--pink); }
+  .donut-lbl  { font-size:10px; color:var(--gray-light); font-family:'DM Mono',monospace; margin-top:2px; }
+
+  /* Treatment bars */
+  .treat-list { display:flex; flex-direction:column; gap:10px; margin-top:4px; }
+  .treat-meta { display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
+  .treat-name { font-size:13px; font-weight:500; color:var(--gray-dark); }
+  .treat-pct  { font-size:12px; font-weight:700; color:var(--gray-mid); font-family:'DM Mono',monospace; }
+  .treat-rev  { font-size:12px; font-weight:700; color:var(--pink-deep); font-family:'DM Mono',monospace; }
+  .treat-bar-track { height:8px; background:var(--pink-pale); border-radius:4px; overflow:hidden; }
+  .treat-bar-fill  { height:100%; border-radius:4px; transition:width .7s cubic-bezier(.34,1.56,.64,1); }
+
+  /* Staff bars */
+  .staff-item { display:flex; flex-direction:column; gap:6px; padding:10px 0; border-bottom:1px solid var(--pink-border); }
+  .staff-item:last-child { border:none; }
+  .staff-row { display:flex; align-items:center; gap:10px; }
+  .staff-av  { width:32px; height:32px; border-radius:50%; background:linear-gradient(135deg,var(--pink),#F472B6); display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#fff; flex-shrink:0; }
+  .staff-name-wrap { flex:1; }
+  .staff-name  { font-size:13px; font-weight:600; color:var(--gray-dark); }
+  .staff-custs { font-size:11px; color:var(--gray-light); font-family:'DM Mono',monospace; }
+  .staff-rev   { font-family:'Playfair Display',serif; font-size:16px; font-weight:700; color:var(--pink); }
+  .staff-bar-track { height:6px; background:rgba(233,30,140,.1); border-radius:3px; overflow:hidden; }
+  .staff-bar-fill  { height:100%; border-radius:3px; background:linear-gradient(90deg,var(--pink),#F472B6); transition:width .7s cubic-bezier(.34,1.56,.64,1); }
+
+  /* Rank */
+  .top-rank { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; font-size:10px; font-weight:700; font-family:'DM Mono',monospace; flex-shrink:0; }
+  .rank-1 { background:#FEF3C7; color:#92400E; }
+  .rank-2 { background:#F1F5F9; color:#334155; }
+  .rank-3 { background:#FCE7F3; color:#9D174D; }
+  .rank-n { background:var(--pink-pale); color:var(--gray-light); }
+
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- ══ GLOBAL PERIOD SELECTOR ══ -->
+<div class="period-bar" id="period-bar">
+  <button class="period-btn" data-p="today"     onclick="setPeriod(this)">Today</button>
+  <button class="period-btn" data-p="yesterday" onclick="setPeriod(this)">Yesterday</button>
+  <button class="period-btn active" data-p="week" onclick="setPeriod(this)">This Week</button>
+  <button class="period-btn" data-p="month"     onclick="setPeriod(this)">This Month</button>
+  <button class="period-btn" data-p="custom"    onclick="setPeriod(this)">Custom Range ▾</button>
+  <span class="period-label-text" id="period-label"></span>
+
+  <!-- Calendar range picker (dropdown) -->
+  <div class="custom-picker" id="custom-picker">
+    <span class="cp-label">From</span>
+    <input class="cp-input" type="date" id="cr-from">
+    <span class="cp-label">→ To</span>
+    <input class="cp-input" type="date" id="cr-to">
+    <button class="btn btn-pink" onclick="applyCustom()" style="padding:8px 18px;font-size:13px">Apply</button>
+    <button class="btn btn-ghost" onclick="closePicker()" style="padding:8px 14px;font-size:13px">✕</button>
+  </div>
+</div>
+
+<!-- ══ KPI STAT CARDS ══ -->
+<div class="stat-row">
+  <div class="kpi-card kc-pink">
+    <div class="kpi-icon">💰</div>
+    <div class="kpi-label">Revenue</div>
+    <div class="kpi-value" id="k-rev">₹0</div>
+    <div class="kpi-growth kg-flat" id="k-rev-g">— %</div>
+    <div class="kpi-sub" id="k-rev-sub">0 transactions</div>
+  </div>
+  <div class="kpi-card kc-green">
+    <div class="kpi-icon">👤</div>
+    <div class="kpi-label">Customers</div>
+    <div class="kpi-value" id="k-cust">0</div>
+    <div class="kpi-growth kg-flat" id="k-cust-g">— %</div>
+    <div class="kpi-sub" id="k-cust-sub">0 visits</div>
+  </div>
+  <div class="kpi-card kc-blue">
+    <div class="kpi-icon">📊</div>
+    <div class="kpi-label">Avg Bill Value</div>
+    <div class="kpi-value" id="k-avg">₹0</div>
+    <div class="kpi-growth kg-flat" id="k-avg-g">— %</div>
+    <div class="kpi-sub">per customer</div>
+  </div>
+  <div class="kpi-card kc-amber">
+    <div class="kpi-icon">🏅</div>
+    <div class="kpi-label">Top Treatment</div>
+    <div class="kpi-value" id="k-top" style="font-size:16px;padding-top:4px">—</div>
+    <div class="kpi-sub" id="k-top-sub"></div>
+  </div>
+</div>
+
+<!-- ══ RETENTION STRIP ══ -->
+<div class="retention-strip">
+  <div class="ret-card">
+    <div class="ret-label">Retention Rate</div>
+    <div class="ret-value" id="r-rate">0%</div>
+    <div class="ret-badge kg-up" id="r-rate-b">🔥 Returning</div>
+  </div>
+  <div class="ret-card">
+    <div class="ret-label">New Clients</div>
+    <div class="ret-value" id="r-new">0</div>
+    <div class="kpi-sub">first visit</div>
+  </div>
+  <div class="ret-card">
+    <div class="ret-label">Returning Clients</div>
+    <div class="ret-value" id="r-ret">0</div>
+    <div class="kpi-sub">repeat visitors</div>
+  </div>
+  <div class="ret-card">
+    <div class="ret-label">Avg. Visits / Client</div>
+    <div class="ret-value" id="r-freq">0</div>
+    <div class="kpi-sub">across all time</div>
+  </div>
+</div>
+
+<!-- ══ REVENUE LINE (Stock-style) full width ══ -->
+<div class="charts-full">
+  <div class="chart-card cc-pink">
+    <div class="chart-head">
+      <div>
+        <div class="chart-title">Salon Revenue Index</div>
+        <div class="chart-sub">Daily revenue · smooth line · hover for exact amount</div>
+      </div>
+      <span class="growth-badge gb-flat" id="growth-badge">— %</span>
+    </div>
+    <div id="apex-revenue" style="min-height:300px"></div>
+  </div>
+</div>
+
+<!-- ══ NEW vs RETURNING (donut) + RETENTION TREND ══ -->
+<div class="charts-wide-narrow">
+
+  <!-- Retention Trend (bar) -->
+  <div class="chart-card cc-blue">
+    <div class="chart-head">
+      <div>
+        <div class="chart-title">Retention Trend</div>
+        <div class="chart-sub">Monthly new vs returning split</div>
+      </div>
+    </div>
+    <div id="apex-retention-trend" style="min-height:220px"></div>
+  </div>
+
+  <!-- New vs Returning donut -->
+  <div class="chart-card cc-rose">
+    <div class="chart-head">
+      <div>
+        <div class="chart-title">New vs Returning</div>
+        <div class="chart-sub">Client composition</div>
+      </div>
+    </div>
+    <div class="donut-wrap">
+      <div id="apex-donut" style="min-height:200px"></div>
+      <div class="donut-center">
+        <div class="donut-pct" id="donut-pct">0%</div>
+        <div class="donut-lbl">Returning</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══ REVENUE BY TREATMENT + STAFF ══ -->
+<div class="charts-2col">
+
+  <div class="chart-card cc-green">
+    <div class="chart-head">
+      <div>
+        <div class="chart-title">Revenue by Service</div>
+        <div class="chart-sub">Per-treatment breakdown</div>
+      </div>
+    </div>
+    <div class="treat-list" id="treat-list">
+      <div style="text-align:center;padding:24px;color:var(--gray-light)">Loading…</div>
+    </div>
+  </div>
+
+  <div class="chart-card cc-amber">
+    <div class="chart-head">
+      <div>
+        <div class="chart-title">Top Staff by Revenue</div>
+        <div class="chart-sub">Performance this period</div>
+      </div>
+      <button class="btn btn-ghost" onclick="exportStaffCSV()" style="font-size:11px;padding:5px 11px">⬇ CSV</button>
+    </div>
+    <div id="staff-list">
+      <div style="text-align:center;padding:24px;color:var(--gray-light)">Loading…</div>
+    </div>
+  </div>
+
+</div>
+
+
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// ══ DATA ══════════════════════════════════════════════
+const ALL = {{ analytics_data | tojson }};
+
+// ══ COLORS ════════════════════════════════════════════
+const PINK  = '#E91E8C', PINK_L = '#F472B6';
+const BLUE  = '#6366F1', GREEN  = '#10B981';
+const AMBER = '#F59E0B', RED    = '#EF4444';
+const TEAL  = '#06B6D4', ROSE   = '#F43F5E';
+const TREAT_COLORS = [PINK, BLUE, GREEN, AMBER, PINK_L, RED, '#8B5CF6', TEAL];
+
+const TT = {
+  backgroundColor:'#fff', titleColor:'#2D2D2D', bodyColor:'#666',
+  borderColor:'#F0C8E8', borderWidth:1, padding:12, cornerRadius:9, boxPadding:4
+};
+
+function inr(n)  { return '₹' + Number(n).toLocaleString('en-IN', {maximumFractionDigits:0}); }
+function inrK(n) {
+  if (n < 1000) return inr(n);
+
+  const val = Math.floor((n/1000) * 10) / 10; // 👈 truncate
+  return '₹' + val + 'K';
+}
+function pct(a,b){ return b ? Math.round(((a-b)/b)*100) : 0; }
+
+// ══ CHART INSTANCES ════════════════════════════════════
+let apexRev = null, apexDonut = null, apexRetTrend = null;
+
+// ══ STATE ══════════════════════════════════════════════
+let period = 'week', cfrom = '', cto = '', revMode = 'daily';
+
+// ══ PERIOD LOGIC ═══════════════════════════════════════
+function setPeriod(btn) {
+  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  period = btn.dataset.p;
+  const picker = document.getElementById('custom-picker');
+  if (period === 'custom') {
+    picker.classList.add('show');
+  } else {
+    picker.classList.remove('show');
+    render();
+  }
+}
+
+function closePicker() {
+  document.getElementById('custom-picker').classList.remove('show');
+  // Revert to previous period if no custom selected
+  if (!cfrom || !cto) {
+    document.querySelectorAll('.period-btn').forEach(b => {
+      if (b.dataset.p === 'week') b.classList.add('active');
+      else b.classList.remove('active');
+    });
+    period = 'week';
+    render();
+  }
+}
+
+function applyCustom() {
+  cfrom = document.getElementById('cr-from').value;
+  cto   = document.getElementById('cr-to').value;
+  if (!cfrom || !cto) { showToast('Select both dates', '⚠️'); return; }
+  document.getElementById('custom-picker').classList.remove('show');
+  render();
+}
+
+
+
+// Close picker when clicking outside
+document.addEventListener('click', e => {
+  const bar = document.getElementById('period-bar');
+  if (!bar.contains(e.target)) {
+    document.getElementById('custom-picker').classList.remove('show');
+  }
+});
+
+// ══ IST-AWARE DATE HELPERS ═════════════════════════════
+// ── Date helpers ─────────────────────────────────────
+// All r.date values from server are IST naive strings: "2026-03-19T14:30:00"
+// .slice(0,10) always gives correct IST date "2026-03-19"
+// We derive "today" from the LATEST date in ALL data, so no browser timezone math needed.
+// If ALL is empty, fall back to server-rendered today from Jinja.
+function istToday() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date());
+}
+
+// Add/subtract days from a YYYY-MM-DD string — returns YYYY-MM-DD
+// Uses local date parts to avoid toISOString() UTC-shift bug in IST
+function addDays(ds, n) {
+  const [y,m,d] = ds.split('-').map(Number);
+  const dt = new Date(y, m-1, d); // local midnight — no UTC conversion
+  dt.setDate(dt.getDate() + n);
+  const ny = dt.getFullYear();
+  const nm = String(dt.getMonth()+1).padStart(2,'0');
+  const nd = String(dt.getDate()).padStart(2,'0');
+  return ny + '-' + nm + '-' + nd; // manual format — no toISOString()
+}
+
+function getFiltered() {
+  const today = istToday();
+  const yest  = addDays(today, -1);
+  const mo    = today.slice(0,7) + '-01';
+
+  // This Week = Monday of current week → today
+  const [ty, tm, td] = today.split('-').map(Number);
+  // getDay(): 0=Sun,1=Mon,2=Tue,3=Wed,4=Thu,5=Fri,6=Sat
+  const dow       = new Date(ty, tm-1, td).getDay();
+  const diffToMon = (dow === 0) ? -6 : 1 - dow; // 0 if today is Mon, negative otherwise
+  const weekStart = addDays(today, diffToMon);
+
+  console.log('[GlowPark] Period:', period, '| Today (IST):', today,
+    '| DOW:', dow, '| WeekStart:', weekStart,
+    '| Dates in ALL:', [...new Set(ALL.map(r=>r.date.slice(0,10)))].sort().join(', '));
+
+  return ALL.filter(r => {
+    const d = r.date.slice(0,10);
+    if (period === 'today')     return d === today;
+    if (period === 'yesterday') return d === yest;
+    if (period === 'week')      return d >= weekStart && d <= today;
+    if (period === 'month')     return d >= mo        && d <= today;
+    if (period === 'custom')    return d >= cfrom     && d <= cto;
+    return true;
+  });
+}
+
+// Previous period for % growth comparison
+function getPrevFiltered() {
+  const today   = istToday();
+  const yest    = addDays(today, -1);
+  const mo      = today.slice(0,7) + '-01';
+  const prevMoEnd   = addDays(mo, -1);
+  const prevMoStart = prevMoEnd.slice(0,7) + '-01';
+
+  // This week = Monday of current week → today
+  const [ty2,tm2,td2] = today.split('-').map(Number);
+  const dow2       = new Date(ty2, tm2-1, td2).getDay();
+  const diffMon2   = (dow2===0)?-6:1-dow2;
+  const weekStart  = addDays(today, diffMon2);
+  const prevWeekEnd  = addDays(weekStart, -1);
+  const prevWeekStart= addDays(weekStart, -7);
+
+  return ALL.filter(r => {
+    const d = r.date.slice(0,10);
+    if (period === 'today')     return d === yest;
+    if (period === 'yesterday') return d === addDays(yest, -1);
+    if (period === 'week')      return d >= prevWeekStart && d <= prevWeekEnd;
+    if (period === 'month')     return d >= prevMoStart   && d <= prevMoEnd;
+    return false;
+  });
+}
+
+// ══ BUCKET HELPERS ══════════════════════════════════════
+function weekKey(ds) {
+  // ds is "YYYY-MM-DD" — parse as local date parts to avoid UTC shift
+  const [y,m,d] = ds.split('-').map(Number);
+  const dt  = new Date(y, m-1, d);
+  const day = dt.getDay(); // 0=Sun
+  dt.setDate(dt.getDate() - (day===0?6:day-1)); // snap to Monday
+  const ny = dt.getFullYear();
+  const nm = String(dt.getMonth()+1).padStart(2,'0');
+  const nd = String(dt.getDate()).padStart(2,'0');
+  return ny+'-'+nm+'-'+nd;
+}
+function monthKey(ds) { return ds.slice(0,7); }
+
+// ══ GROWTH BADGE HELPER ════════════════════════════════
+function growthBadge(curr, prev) {
+  const p = pct(curr, prev);
+  const cls = p > 0 ? 'kg-up' : p < 0 ? 'kg-down' : 'kg-flat';
+  const icon = p > 0 ? '▲' : p < 0 ? '▼' : '—';
+  return { cls, text: (p >= 0 ? icon + ' +' : icon + ' ') + p + '%' };
+}
+function applyGrowth(elId, curr, prev) {
+  const { cls, text } = growthBadge(curr, prev);
+  const el = document.getElementById(elId);
+  el.className = 'kpi-growth ' + cls;
+  el.textContent = text;
+}
+
+// ══ MAIN RENDER ════════════════════════════════════════
+function render() {
+  const data = getFiltered();
+  const prev = getPrevFiltered();
+
+  // Period label
+  const today = istToday();
+  const yest  = addDays(today, -1);
+  // Format date strings directly without new Date() to avoid timezone shifts
+  function fmtDate(ds, opts) {
+    const [y,m,d] = ds.split('-').map(Number);
+    return new Date(y, m-1, d).toLocaleDateString('en-IN', opts);
+  }
+  const labels = {
+    today:     'Today · ' + fmtDate(today, {day:'numeric',month:'short'}),
+    yesterday: 'Yesterday · ' + fmtDate(yest, {day:'numeric',month:'short'}),
+    week:      'This Week',
+    month:     'This Month · ' + fmtDate(today, {month:'long',year:'numeric'}),
+    custom:    cfrom + ' → ' + cto,
+  };
+  document.getElementById('period-label').textContent = labels[period] || '';
+
+  // Core metrics
+  const rev     = data.reduce((s,r)=>s+r.amount, 0);
+  const prevRev = prev.reduce((s,r)=>s+r.amount, 0);
+  const custIds = new Set(data.map(r=>r.customer_id));
+  const custs   = custIds.size;
+  const prevCustIds = new Set(prev.map(r=>r.customer_id));
+  const prevCusts   = prevCustIds.size;
+  const avg     = custs ? Math.round(rev/custs) : 0;
+  const prevAvg = prevCusts ? Math.round(prevRev/prevCusts) : 0;
+
+  // New vs returning — count unique customers, not visit records
+  // A customer is "new" if their is_returning flag is false (only 1 visit ever)
+  // A customer is "returning" if they have >1 visits in the full database
+  const newCustIds = new Set(
+    data.filter(r => !r.is_returning).map(r => r.customer_id)
+  );
+  const retCustIds = new Set(
+    data.filter(r => r.is_returning).map(r => r.customer_id)
+  );
+  // A customer seen in BOTH (e.g. their 1st visit was new, later visits are returning)
+  // counts as returning
+  retCustIds.forEach(id => newCustIds.delete(id));
+  const newC   = newCustIds.size;
+  const retC   = retCustIds.size;
+  const retPct = custs ? Math.round((retC/custs)*100) : 0;
+
+  // Avg visits per customer (all time)
+  const visitCounts = {};
+  ALL.forEach(r => { visitCounts[r.customer_id] = (visitCounts[r.customer_id]||0)+1; });
+  const totalUniq = Object.keys(visitCounts).length || 1;
+  const avgVisits = (ALL.length / totalUniq).toFixed(1);
+
+  // Treatment stats
+  const tCount={}, tRev={};
+  data.forEach(r => r.treatments.forEach(t => {
+    const price = (r.treatment_prices && r.treatment_prices[t]) ? r.treatment_prices[t] : 0;
+    tCount[t]=(tCount[t]||0)+1; tRev[t]=(tRev[t]||0)+price;
+  }));
+  const topT = Object.entries(tCount).sort((a,b)=>b[1]-a[1])[0];
+
+  // ── Update KPI cards ──
+  document.getElementById('k-rev').textContent    = inr(rev);
+  document.getElementById('k-rev-sub').textContent= data.length + ' transactions';
+  applyGrowth('k-rev-g', rev, prevRev);
+
+  document.getElementById('k-cust').textContent    = custs;
+  document.getElementById('k-cust-sub').textContent= custs + ' unique customers';
+  applyGrowth('k-cust-g', custs, prevCusts);
+
+  document.getElementById('k-avg').textContent = inr(avg);
+  applyGrowth('k-avg-g', avg, prevAvg);
+
+  document.getElementById('k-top').textContent    = topT ? topT[0] : '—';
+  document.getElementById('k-top-sub').textContent= topT ? topT[1]+' bookings' : '';
+
+  // ── Update retention strip ──
+  document.getElementById('r-rate').textContent = retPct + '%';
+  document.getElementById('r-new').textContent  = newC;
+  document.getElementById('r-ret').textContent  = retC;
+  document.getElementById('r-freq').textContent = avgVisits;
+  const rb = document.getElementById('r-rate-b');
+  rb.className = 'ret-badge ' + (retPct>=50?'kg-up':'kg-flat');
+  rb.textContent = retPct >= 50 ? '🔥 Healthy' : retPct > 0 ? '📈 Growing' : '—';
+
+  // ── Donut center ──
+  document.getElementById('donut-pct').textContent = retPct + '%';
+
+  // ── Render charts ──
+  renderRevenue(data); // always plot full history — no period filter on revenue chart
+  renderDonut(newC, retC);
+  renderRetentionTrend();
+  renderTreatments(tRev);
+  renderStaff(data);
+}
+
+// ══ 1. REVENUE — All-time stock line, no period filter ══
+function renderRevenue(data) {
+  // ── Aggregate ALL transactions by day (ignores period filter) ──
+  const byDay = {};
+  data.forEach(r => {
+    const d = r.date.slice(0,10);
+    byDay[d] = (byDay[d]||0) + r.amount;
+  });
+
+  const days = Object.keys(byDay).sort();
+  const vals = days.map(d => byDay[d]);
+
+  if (!days.length) {
+    if (apexRev) { apexRev.destroy(); apexRev = null; }
+    document.getElementById('apex-revenue').innerHTML =
+      '<div style="text-align:center;padding:60px;color:var(--gray-light)">No data for this period</div>';
+    document.getElementById('growth-badge').textContent = '— %';
+    document.getElementById('growth-badge').className   = 'growth-badge gb-flat';
+    return;
+  }
+
+  // ── Growth badge ──
+  if (days.length >= 2) {
+    const g = vals[vals.length-2]
+      ? Math.round(((vals[vals.length-1]-vals[vals.length-2])/vals[vals.length-2])*100) : 0;
+    const badge = document.getElementById('growth-badge');
+    badge.textContent = (g>=0?'🔼 +':'🔽 ')+Math.abs(g)+'%';
+    badge.className   = 'growth-badge '+(g>0?'gb-up':g<0?'gb-down':'gb-flat');
+  }
+
+  // ── Convert YYYY-MM-DD strings to LOCAL midnight timestamps ──
+  // ApexCharts datetime renders in LOCAL timezone.
+  // new Date(y, m-1, d) gives LOCAL midnight → correct date label always.
+  function toTs(ds) {
+    const [y,m,d] = ds.split('-').map(Number);
+    return new Date(y, m-1, d).getTime(); // local midnight
+  }
+
+  const seriesData = days.map((d,i) => [toTs(d), vals[i]]);
+
+  // Peak point
+  const peakIdx = vals.indexOf(Math.max(...vals));
+  const peakTs  = toTs(days[peakIdx]);
+  const peakVal = vals[peakIdx];
+
+  const opts = {
+    series:[{ name:'Revenue', data: seriesData }],
+    chart:{
+      type: 'area',
+      height: 300,
+      toolbar:{ show:false },
+      zoom:{ enabled:false },
+      fontFamily:"'DM Sans', sans-serif",
+      background: 'transparent',
+      animations:{
+        enabled: true,
+        easing: 'easeinout',
+        speed: 900,
+        animateGradually:{ enabled:true, delay:50 },
+        dynamicAnimation:{ enabled:true, speed:400 }
+      }
+    },
+    stroke:{
+      curve: 'smooth',
+      width: 2.5,
+      colors: [PINK]
+    },
+    fill:{
+      type: 'gradient',
+      gradient:{
+        shadeIntensity: 1,
+        opacityFrom: 0.32,
+        opacityTo:   0.01,
+        colorStops:[
+          { offset:0,   color:PINK, opacity:0.32 },
+          { offset:80,  color:PINK, opacity:0.04 },
+          { offset:100, color:PINK, opacity:0    }
+        ]
+      }
+    },
+    markers:{
+      size: 0,
+      hover:{ size:6 },
+      colors:['#fff'],
+      strokeColors: PINK,
+      strokeWidth: 2.5
+    },
+    dataLabels:{ enabled:false },
+    grid:{
+      borderColor:'#F9EEF7',
+      strokeDashArray: 3,
+      xaxis:{ lines:{ show:false } },
+      yaxis:{ lines:{ show:true  } },
+      padding:{ top:10, right:16, bottom:0, left:10 }
+    },
+    xaxis:{
+      type: 'datetime',          // ← datetime not category — fixes epoch bug
+      labels:{
+        datetimeUTC: false,      // local midnight timestamps — matches local date labels
+        style:{ colors:'#B0B0C0', fontSize:'11px', fontFamily:"'DM Mono',monospace" },
+        rotate: -20,
+        maxHeight: 50,
+        datetimeFormatter:{
+          year:  'yyyy',
+          month: "MMM 'yy",
+          day:   'dd MMM',
+          hour:  'dd MMM'
+        }
+      },
+      axisBorder:{ show:false },
+      axisTicks:{ show:false },
+      tooltip:{ enabled:false }
+    },
+    yaxis:{
+      labels:{
+        style:{ colors:'#B0B0C0', fontSize:'11px', fontFamily:"'DM Mono',monospace" },
+        formatter: v => inrK(v)
+      }
+    },
+    tooltip:{
+      theme: 'light',
+      shared: true,
+      intersect: false,
+      style:{ fontSize:'12px', fontFamily:"'DM Sans',sans-serif" },
+      x:{
+        // Format the UTC timestamp as a readable IST date
+        formatter: v => {
+          // v is local midnight timestamp — just format directly
+          const d = new Date(v);
+          return d.toLocaleDateString('en-IN',{
+            weekday:'short', day:'numeric', month:'short', year:'numeric'
+          });
+        }
+      },
+      y:{ formatter: v => inr(v) },
+      marker:{ show:true, fillColors:[PINK] }
+    },
+    colors:[PINK],
+    annotations:{
+      points: peakVal > 0 ? [{
+        x: peakTs,
+        y: peakVal,
+        marker:{
+          size:7, fillColor:'#fff',
+          strokeColor:PINK, strokeWidth:3, radius:3
+        },
+        label:{
+          text: '🔥 ' + inrK(peakVal),
+          borderColor: PINK,
+          borderWidth: 1,
+          style:{
+            background:'#fff', color:PINK,
+            fontSize:'11px', fontFamily:"'DM Mono',monospace",
+            fontWeight:700,
+            padding:{ left:8, right:8, top:4, bottom:4 }
+          },
+          offsetY: -14
+        }
+      }] : []
+    }
+  };
+
+  if (apexRev) { apexRev.destroy(); apexRev = null; }
+  apexRev = new ApexCharts(document.getElementById('apex-revenue'), opts);
+  apexRev.render();
+}
+
+// ══ 2. DONUT: New vs Returning ═════════════════════════
+function renderDonut(newC, retC) {
+  const opts = {
+    series: [retC, newC],
+    labels: ['Returning', 'New'],
+    chart:{ type:'donut', height:200, fontFamily:"'DM Sans',sans-serif", animations:{speed:500} },
+    colors: [PINK, BLUE],
+    plotOptions:{ pie:{ donut:{ size:'68%' } } },
+    dataLabels:{ enabled:false },
+    legend:{ position:'bottom', fontSize:'12px', fontFamily:"'DM Sans',sans-serif", markers:{radius:6}, labels:{colors:['#2D2D2D','#2D2D2D']} },
+    tooltip:{ theme:'light', style:{fontSize:'12px'}, y:{formatter:v=>v+' customers'} },
+    stroke:{ width:2, colors:['#fff'] }
+  };
+  if (apexDonut) { apexDonut.updateOptions(opts, true, true); }
+  else { apexDonut = new ApexCharts(document.getElementById('apex-donut'), opts); apexDonut.render(); }
+}
+
+// ══ 3. RETENTION TREND (monthly stacked bar) ═══════════
+function renderRetentionTrend() {
+  // Group ALL data by month, split new vs returning
+  const byMonth = {};
+  ALL.forEach(r => {
+    const m = r.date.slice(0,7);
+    if (!byMonth[m]) byMonth[m] = { new:0, ret:0, seen:new Set() };
+    if (!byMonth[m].seen.has(r.customer_id)) {
+      byMonth[m].seen.add(r.customer_id);
+      if (!r.is_returning) byMonth[m].new++;
+      else                 byMonth[m].ret++;
+    }
+  });
+  const months  = Object.keys(byMonth).sort().slice(-6); // last 6 months
+  const newVals = months.map(m => byMonth[m].new);
+  const retVals = months.map(m => byMonth[m].ret);
+  const retPcts = months.map(m => {
+    const total = byMonth[m].new + byMonth[m].ret;
+    return total ? Math.round((byMonth[m].ret/total)*100) : 0;
+  });
+
+  const opts = {
+    series:[
+      { name:'Returning', data: months.map((m,i)=>({x:m,y:retVals[i]})) },
+      { name:'New',       data: months.map((m,i)=>({x:m,y:newVals[i]})) },
+    ],
+    chart:{ type:'bar', height:220, stacked:true, toolbar:{show:false}, fontFamily:"'DM Sans',sans-serif", animations:{speed:500} },
+    plotOptions:{ bar:{ borderRadius:4, columnWidth:'55%' } },
+    colors:[PINK, BLUE],
+    dataLabels:{ enabled:false },
+    grid:{ borderColor:'#F9ECF6', strokeDashArray:4 },
+    xaxis:{ type:'category', labels:{style:{colors:'#A0A0A0',fontSize:'11px'}}, axisBorder:{show:false}, axisTicks:{show:false} },
+    yaxis:{ labels:{style:{colors:'#A0A0A0',fontSize:'11px'}, formatter:v=>Math.round(v)} },
+    legend:{ position:'top', fontSize:'12px', fontFamily:"'DM Sans',sans-serif", markers:{radius:6} },
+    tooltip:{
+      theme:'light', shared:true, intersect:false,
+      style:{fontSize:'12px',fontFamily:"'DM Sans',sans-serif"},
+      y:{ formatter:(v,{seriesIndex,dataPointIndex})=>{
+        const total = newVals[dataPointIndex]+retVals[dataPointIndex];
+        const p = total ? Math.round((v/total)*100) : 0;
+        return v+' customers ('+p+'%)';
+      }}
+    }
+  };
+
+  if (apexRetTrend) { apexRetTrend.updateOptions(opts, true, true); }
+  else { apexRetTrend = new ApexCharts(document.getElementById('apex-retention-trend'), opts); apexRetTrend.render(); }
+}
+
+// ══ 4. TREATMENTS ══════════════════════════════════════
+function renderTreatments(tRev) {
+  const entries = Object.entries(tRev).sort((a,b)=>b[1]-a[1]).slice(0,7);
+  const total   = entries.reduce((s,[,v])=>s+v, 0) || 1;
+  const maxRev  = entries[0]?.[1] || 1;
+  document.getElementById('treat-list').innerHTML = entries.length
+    ? entries.map(([name,rev],i) => {
+        const p = Math.round((rev/total)*100);
+        return `<div class="treat-row">
+          <div class="treat-meta">
+            <div class="treat-name">${name}</div>
+            <div style="display:flex;gap:10px">
+              <span class="treat-pct">${p}%</span>
+              <span class="treat-rev">${inr(rev)}</span>
+            </div>
+          </div>
+          <div class="treat-bar-track">
+            <div class="treat-bar-fill" style="width:${Math.round((rev/maxRev)*100)}%;background:linear-gradient(90deg,${TREAT_COLORS[i%TREAT_COLORS.length]},${TREAT_COLORS[i%TREAT_COLORS.length]}99)"></div>
+          </div>
+        </div>`;
+      }).join('')
+    : '<div style="text-align:center;padding:24px;color:var(--gray-light)">No data for this period</div>';
+}
+
+// ══ 5. STAFF ═══════════════════════════════════════════
+function renderStaff(data) {
+  const sm = {};
+  data.forEach(r => {
+    if (!sm[r.staff]) sm[r.staff] = { rev:0, custs:new Set() };
+    sm[r.staff].rev += r.amount;
+    sm[r.staff].custs.add(r.customer_id);
+  });
+  const entries = Object.entries(sm).map(([n,d])=>({name:n,rev:d.rev,custs:d.custs.size}))
+    .sort((a,b)=>b.rev-a.rev).slice(0,6);
+  const maxRev  = entries[0]?.rev || 1;
+  const rankCls = i => i===0?'rank-1':i===1?'rank-2':i===2?'rank-3':'rank-n';
+
+  document.getElementById('staff-list').innerHTML = entries.length
+    ? entries.map((s,i) => `
+        <div class="staff-item">
+          <div class="staff-row">
+            <span class="top-rank ${rankCls(i)}">${i+1}</span>
+            <div class="staff-av">${s.name[0].toUpperCase()}</div>
+            <div class="staff-name-wrap">
+              <div class="staff-name">${s.name}</div>
+              <div class="staff-custs">${s.custs} customer${s.custs!==1?'s':''}</div>
+            </div>
+            <div class="staff-rev">${inrK(s.rev)}</div>
+          </div>
+          <div class="staff-bar-track">
+            <div class="staff-bar-fill" style="width:${Math.round((s.rev/maxRev)*100)}%"></div>
+          </div>
+        </div>`).join('')
+    : '<div style="text-align:center;padding:24px;color:var(--gray-light)">No data for this period</div>';
+}
+
+
+
+// ══ EXPORT ══════════════════════════════════════════════
+function exportStaffCSV() {
+  const data=getFiltered(), sm={};
+  data.forEach(r=>{if(!sm[r.staff])sm[r.staff]={rev:0,custs:new Set()};sm[r.staff].rev+=r.amount;sm[r.staff].custs.add(r.customer_id);});
+  const rows=[['Staff','Revenue','Customers'],...Object.entries(sm).sort((a,b)=>b[1].rev-a[1].rev).map(([n,d])=>[n,d.rev,d.custs.size])];
+  exportCSV(rows.map(r=>r.map(v=>'"'+v+'"').join(',')).join('\n'),'staff-performance.csv');
+}
+
+// ══ INIT ════════════════════════════════════════════════
+render();
+</script>
+{% endblock %}

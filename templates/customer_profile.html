@@ -1,0 +1,150 @@
+{% extends 'base.html' %}
+{% block title %}{{ customer.name }} – Glow Park{% endblock %}
+{% block page_title %}Customer Profile{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{{ url_for('new_visit') }}?customer_id={{ customer.id }}" class="btn btn-pink">✦ New Visit</a>
+  <a href="{{ url_for('dashboard') }}" class="btn btn-ghost">← Back</a>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  .profile-hero {
+    background:linear-gradient(135deg,var(--pink),var(--pink-deep));
+    border-radius:16px; padding:28px 32px;
+    display:flex; align-items:center; gap:24px;
+    color:#fff; margin-bottom:20px;
+    box-shadow:0 8px 28px rgba(233,30,140,.25);
+  }
+  .ph-avatar {
+    width:72px; height:72px; border-radius:50%;
+    background:rgba(255,255,255,.2);
+    display:flex; align-items:center; justify-content:center;
+    font-size:30px; font-weight:800; flex-shrink:0;
+    border:3px solid rgba(255,255,255,.4);
+  }
+  .ph-name  { font-family:'Playfair Display',serif; font-size:26px; font-weight:800; margin-bottom:4px; }
+  .ph-phone { font-family:'DM Mono',monospace; font-size:13px; opacity:.85; }
+  .ph-badge { background:rgba(255,255,255,.2); border:1px solid rgba(255,255,255,.3); border-radius:8px; padding:4px 12px; font-size:11px; font-weight:700; font-family:'DM Mono',monospace; display:inline-block; margin-top:6px; }
+  .ph-stats { margin-left:auto; display:flex; gap:24px; }
+  .ph-stat  { text-align:center; }
+  .ph-stat-val   { font-family:'Playfair Display',serif; font-size:24px; font-weight:700; }
+  .ph-stat-label { font-size:11px; opacity:.75; font-family:'DM Mono',monospace; margin-top:2px; }
+
+  .edit-form { display:none; }
+  .edit-form.show { display:block; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Hero -->
+<div class="profile-hero">
+  <div class="ph-avatar">{{ customer.name[0].upper() }}</div>
+  <div>
+    <div class="ph-name">{{ customer.name }}</div>
+    <div class="ph-phone">📞 {{ customer.phone }}{% if customer.email %} · ✉ {{ customer.email }}{% endif %}{% if customer.age %} · 🎂 {{ customer.age }} yrs{% endif %}</div>
+    <span class="ph-badge">
+      {% if customer.is_returning %}↩ Returning Customer{% else %}★ New Customer{% endif %}
+    </span>
+  </div>
+  <div class="ph-stats">
+    <div class="ph-stat">
+      <div class="ph-stat-val">{{ customer.total_visits }}</div>
+      <div class="ph-stat-label">Total Visits</div>
+    </div>
+    <div class="ph-stat">
+      <div class="ph-stat-val">₹{{ '{:,.0f}'.format(customer.total_spent) }}</div>
+      <div class="ph-stat-label">Lifetime Value</div>
+    </div>
+    <div class="ph-stat">
+      <div class="ph-stat-val">
+        {% if customer.total_visits > 1 %}
+          {% set days = (customer.visits.first().visit_date - customer.visits.order_by('visit_date asc').first().visit_date).days %}
+          {{ (days // (customer.total_visits - 1)) if days else '—' }}d
+        {% else %}—{% endif %}
+      </div>
+      <div class="ph-stat-label">Avg Frequency</div>
+    </div>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 300px;gap:18px;align-items:start">
+
+  <!-- Visit History -->
+  <div>
+    <div class="section-card">
+      <div class="section-head">
+        <div class="section-title">Visit History</div>
+        <div style="font-size:12px;color:var(--gray-light);margin-left:auto">{{ visits|length }} visits</div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Bill #</th><th>Visit #</th><th>Treatments</th><th>Staff</th><th>Payment</th><th>Amount</th><th>Date</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for v in visits %}
+            <tr>
+              <td><span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--pink)">#GP{{ '%04d'|format(v.id) }}</span></td>
+              <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--gray-light)">#{{ loop.revindex }}</td>
+              <td>
+                {% for t in v.treatments %}
+                  <span style="display:inline-block;background:var(--pink-light);color:var(--pink-deep);border-radius:5px;padding:2px 7px;font-size:11px;margin:1px">{{ t.name }}</span>
+                {% endfor %}
+              </td>
+              <td style="font-size:12px">{{ v.staff.name if v.staff else '—' }}</td>
+              <td><span class="badge b-{{ (v.payment_method or 'cash').lower() }}">{{ (v.payment_method or 'CASH').upper() }}</span></td>
+              <td><b style="color:var(--pink-deep)">₹{{ v.total_amount }}</b></td>
+              <td style="font-size:12px;color:var(--gray-light)">{{ v.visit_date.strftime('%d %b %Y, %I:%M %p') }}</td>
+              <td>
+                <div style="display:flex;gap:4px">
+                  <a href="{{ url_for('generate_bill', visit_id=v.id) }}" class="icon-btn" title="View Bill">👁</a>
+                  <a href="{{ url_for('download_bill', visit_id=v.id) }}" class="icon-btn" title="PDF">📄</a>
+                  <button class="icon-btn wa" onclick="sendWhatsApp('{{ customer.phone }}','{{ customer.name }}',{{ v.id }},'{{ v.total_amount }}')" title="WhatsApp">💬</button>
+                </div>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="8" style="text-align:center;padding:30px;color:var(--gray-light)">No visits yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Profile -->
+  <div>
+    <div class="section-card">
+      <div class="section-head">
+        <div class="section-title">Edit Profile</div>
+        <div style="font-size:11px;color:var(--gray-light)">Won't affect past visits</div>
+      </div>
+      <div style="padding:18px 20px">
+        <form method="POST" action="{{ url_for('edit_customer', customer_id=customer.id) }}">
+          <div class="form-group" style="margin-bottom:14px">
+            <label class="form-label">Name</label>
+            <input type="text" name="name" class="form-input" value="{{ customer.name }}" required>
+          </div>
+          <div class="form-group" style="margin-bottom:14px">
+            <label class="form-label">Email</label>
+            <input type="email" name="email" class="form-input" value="{{ customer.email or '' }}" placeholder="optional">
+          </div>
+          <div class="form-group" style="margin-bottom:18px">
+            <label class="form-label">Age</label>
+            <input type="number" name="age" class="form-input" value="{{ customer.age or '' }}" min="5" max="100">
+          </div>
+          <button type="submit" class="btn btn-pink" style="width:100%;justify-content:center">Update Profile</button>
+        </form>
+        <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--pink-border)">
+          <a href="{{ url_for('new_visit') }}?customer_id={{ customer.id }}" class="btn btn-outline" style="width:100%;justify-content:center">
+            ✦ Add New Visit
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

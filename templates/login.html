@@ -1,101 +1,114 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login – Glow Park Salon</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --pink:#E91E8C; --pink-deep:#C4177A; --pink-soft:#F472B6;
+      --pink-light:#FCE4F3; --pink-pale:#FDF0F8; --pink-border:#F0C8E8;
+      --gray-dark:#2D2D2D; --gray-mid:#666; --gray-light:#A0A0A0;
+    }
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{
+      font-family:'DM Sans',sans-serif;
+      min-height:100vh; display:flex;
+      background: linear-gradient(135deg, #FFF8FC 0%, #FCE4F3 50%, #FFF8FC 100%);
+      position:relative; overflow:hidden;
+    }
+    /* decorative blobs */
+    body::before{content:'';position:absolute;width:500px;height:500px;border-radius:50%;
+      background:radial-gradient(circle,rgba(233,30,140,.12),transparent 70%);
+      top:-100px;right:-100px;pointer-events:none;}
+    body::after{content:'';position:absolute;width:400px;height:400px;border-radius:50%;
+      background:radial-gradient(circle,rgba(244,114,182,.1),transparent 70%);
+      bottom:-80px;left:-80px;pointer-events:none;}
 
-    <title>Login | Glow Park</title>
+    .left-panel{
+      flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+      padding:48px; position:relative;
+    }
+    .brand-wrap{text-align:center; margin-bottom:40px;}
+    .brand-icon{font-size:56px; margin-bottom:12px; display:block; animation:float 3s ease-in-out infinite;}
+    @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+    .brand-name{font-family:'Playfair Display',serif;font-size:44px;font-weight:800;color:var(--pink);letter-spacing:-1px;}
+    .brand-tagline{font-size:14px;color:var(--gray-light);margin-top:6px;letter-spacing:1px;}
 
-    <link
-      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
-      rel="stylesheet"
-    />
+    .login-box{
+      background:#fff;
+      border:1px solid var(--pink-border);
+      border-radius:20px;
+      padding:42px 40px;
+      width:420px;
+      box-shadow:0 24px 64px rgba(233,30,140,.14);
+    }
+    .login-title{font-family:'Playfair Display',serif;font-size:24px;font-weight:700;color:var(--gray-dark);margin-bottom:6px;}
+    .login-sub{font-size:13px;color:var(--gray-light);margin-bottom:28px;}
 
-    <style>
-      body {
-        background: linear-gradient(to right, #ff9ad5, #ffc0cb);
-        height: 100vh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
+    .field{margin-bottom:18px;}
+    .field label{display:block;font-size:10px;font-weight:600;color:var(--gray-mid);letter-spacing:1px;text-transform:uppercase;font-family:'DM Mono',monospace;margin-bottom:7px;}
+    .field input{width:100%;background:#fff;border:1.5px solid var(--pink-border);border-radius:10px;padding:12px 14px;font-size:14px;font-family:'DM Sans',sans-serif;color:var(--gray-dark);outline:none;transition:border-color .16s,box-shadow .16s;}
+    .field input:focus{border-color:var(--pink);box-shadow:0 0 0 3px rgba(233,30,140,.08);}
 
-      .card {
-        border: none;
-        border-radius: 12px;
-      }
+    .login-btn{width:100%;background:var(--pink);color:#fff;border:none;border-radius:10px;padding:14px;font-size:14px;font-weight:700;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .18s;margin-top:6px;box-shadow:0 6px 18px rgba(233,30,140,.28);}
+    .login-btn:hover{background:var(--pink-deep);transform:translateY(-1px);box-shadow:0 10px 28px rgba(233,30,140,.36);}
 
-      .brand {
-        font-size: 26px;
-        font-weight: bold;
-        color: #ff4da6;
-      }
-    </style>
-  </head>
+    .reg-link{text-align:center;margin-top:20px;font-size:13px;color:var(--gray-light);}
+    .reg-link a{color:var(--pink);font-weight:600;text-decoration:none;}
+    .reg-link a:hover{text-decoration:underline;}
 
-  <body>
-    <div class="container">
-      <div class="row justify-content-center">
-        <div class="col-lg-4 col-md-6">
-          <div class="card shadow-lg p-4">
-            <div class="text-center mb-3">
-              <h3 class="brand">✨ Glow Park</h3>
-              <p class="text-muted">Login to your account</p>
-            </div>
+    .flash-msg{padding:11px 14px;border-radius:9px;margin-bottom:16px;font-size:13px;font-weight:500;}
+    .flash-error{background:#FEE2E2;color:#991B1B;border:1px solid #FECACA;}
+    .flash-success{background:#D1FAE5;color:#065F46;border:1px solid #A7F3D0;}
 
-            <!-- Flash Messages -->
+    .petal{position:absolute;font-size:18px;animation:fall linear infinite;opacity:.35;pointer-events:none;}
+    @keyframes fall{0%{transform:translateY(-20px) rotate(0deg);opacity:.4}100%{transform:translateY(100vh) rotate(360deg);opacity:0}}
+  </style>
+</head>
+<body>
+  <!-- floating petals -->
+  <span class="petal" style="left:10%;animation-duration:8s;animation-delay:0s">🌸</span>
+  <span class="petal" style="left:30%;animation-duration:11s;animation-delay:2s">🌷</span>
+  <span class="petal" style="left:55%;animation-duration:9s;animation-delay:4s">🌸</span>
+  <span class="petal" style="left:75%;animation-duration:13s;animation-delay:1s">🌺</span>
+  <span class="petal" style="left:90%;animation-duration:10s;animation-delay:3s">🌸</span>
 
-            {% with messages = get_flashed_messages(with_categories=true) %} {%
-            if messages %} {% for category, message in messages %}
-
-            <div class="alert alert-{{category}} alert-dismissible fade show">
-              {{ message }}
-              <button
-                type="button"
-                class="btn-close"
-                data-bs-dismiss="alert"
-              ></button>
-            </div>
-
-            {% endfor %} {% endif %} {% endwith %}
-
-            <form method="POST" action="/login">
-              <div class="mb-3">
-                <label class="form-label">Email</label>
-                <input
-                  type="email"
-                  class="form-control"
-                  name="Email"
-                  required
-                />
-              </div>
-
-              <div class="mb-3">
-                <label class="form-label">Password</label>
-                <input
-                  type="password"
-                  class="form-control"
-                  name="password"
-                  required
-                />
-              </div>
-
-              <div class="d-grid">
-                <button type="submit" class="btn btn-dark">Login</button>
-              </div>
-            </form>
-
-            <div class="text-center mt-3">
-              <p class="mb-0">
-                Don't have an account?
-                <a href="/register">Register</a>
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
+  <div class="left-panel">
+    <div class="brand-wrap">
+      <span class="brand-icon">🌸</span>
+      <div class="brand-name">Glow Park</div>
+      <div class="brand-tagline">Beauty &amp; Wellness · Chennai</div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-  </body>
+    <div class="login-box">
+      <div class="login-title">Welcome back</div>
+      <div class="login-sub">Sign in to your salon dashboard</div>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for cat,msg in messages %}
+          <div class="flash-msg flash-{{ cat }}">{{ msg }}</div>
+        {% endfor %}
+      {% endwith %}
+
+      <form method="POST" action="{{ url_for('login') }}">
+        <div class="field">
+          <label>Email address</label>
+          <input type="email" name="Email" placeholder="you@glowpark.in" required>
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input type="password" name="password" placeholder="••••••••" required>
+        </div>
+        <button type="submit" class="login-btn">Sign In →</button>
+      </form>
+      {% if no_users %}
+      <div class="reg-link" style="margin-top:18px;padding-top:16px;border-top:1px solid var(--pink-border)">
+        🌸 First time? <a href="{{ url_for('register') }}">Set up your admin account</a>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</body>
 </html>

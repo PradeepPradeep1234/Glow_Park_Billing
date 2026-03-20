@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+{% block title %}Manage Treatments{% endblock %}
+
+{% block page_title %}Manage Treatments{% endblock %}
+
+{% block content %}
+
+<div class="section-card">
+
+  <!-- ADD FORM -->
+  <div style="margin-bottom:20px;">
+    <form method="POST" action="{{ url_for('add_treatment') }}" style="display:flex;gap:10px;">
+      <input type="text" name="name" placeholder="Treatment name" required class="input">
+      <input type="number" name="price" placeholder="Price" required class="input">
+      <button class="btn btn-pink">+ Add</button>
+    </form>
+  </div>
+
+  <!-- TABLE -->
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Price</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {% for t in treatments %}
+        <tr>
+          <td>{{ t.name }}</td>
+          <td>₹{{ t.price }}</td>
+
+          <td>
+            {% if t.is_active %}
+              <span class="badge b-green">Active</span>
+            {% else %}
+              <span class="badge b-red">Inactive</span>
+            {% endif %}
+          </td>
+
+          <td style="display:flex;gap:5px;">
+
+            <!-- EDIT -->
+            <form method="POST" action="{{ url_for('edit_treatment', id=t.id) }}">
+              <input type="text" name="name" value="{{ t.name }}" required style="width:100px;">
+              <input type="number" name="price" value="{{ t.price }}" required style="width:80px;">
+              <button class="btn btn-outline">Update</button>
+            </form>
+
+            <!-- TOGGLE -->
+            <form method="POST" action="{{ url_for('toggle_treatment', id=t.id) }}">
+              <button class="btn btn-ghost">
+                {% if t.is_active %}Disable{% else %}Enable{% endif %}
+              </button>
+            </form>
+
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+{% endblock %}

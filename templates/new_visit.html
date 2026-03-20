@@ -1,0 +1,303 @@
+{% extends 'base.html' %}
+{% block title %}New Visit – Glow Park{% endblock %}
+{% block page_title %}New Visit{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{{ url_for('dashboard') }}" class="btn btn-ghost">← Back</a>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* Treatment selector */
+  .treatment-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(155px,1fr)); gap:10px; }
+  .treatment-item { border:1.5px solid var(--pink-border); border-radius:10px; padding:11px 13px; cursor:pointer; transition:all .16s; display:flex; align-items:center; gap:9px; background:#fff; }
+  .treatment-item:hover { border-color:var(--pink); background:var(--pink-pale); }
+  .treatment-item input[type=checkbox] { display:none; }
+  .treatment-item.selected { border-color:var(--pink); background:var(--pink-light); }
+  .t-check { width:17px; height:17px; border-radius:5px; border:2px solid var(--pink-border); background:#fff; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:10px; color:transparent; transition:all .16s; }
+  .treatment-item.selected .t-check { background:var(--pink); border-color:var(--pink); color:#fff; }
+  .t-name  { font-size:13px; font-weight:500; color:var(--gray-dark); }
+  .t-price { font-size:11px; color:var(--pink); font-family:'DM Mono',monospace; }
+
+  .total-strip { background:linear-gradient(135deg,var(--pink),var(--pink-deep)); border-radius:12px; padding:16px 20px; display:flex; align-items:center; justify-content:space-between; color:#fff; margin-top:16px; }
+  .total-label { font-size:13px; opacity:.85; }
+  .total-val   { font-family:'Playfair Display',serif; font-size:26px; font-weight:700; }
+
+  /* Phone lookup states */
+  .phone-wrap { position:relative; }
+  .phone-status { position:absolute; right:12px; top:50%; transform:translateY(-50%); font-size:16px; }
+
+  /* Customer cards */
+  .customer-card {
+    display:none; border-radius:12px; padding:16px 18px;
+    margin-bottom:16px; border:1.5px solid;
+  }
+  .customer-card.new-customer {
+    background:#EFF6FF; border-color:#BFDBFE;
+    display:block;
+  }
+  .customer-card.returning {
+    background:linear-gradient(135deg,#D1FAE5,#A7F3D0);
+    border-color:#6EE7B7; display:block;
+  }
+  .cc-top { display:flex; align-items:center; gap:12px; margin-bottom:10px; }
+  .cc-avatar { width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:700; color:#fff; flex-shrink:0; }
+  .cc-avatar.new     { background:linear-gradient(135deg,#3B82F6,#60A5FA); }
+  .cc-avatar.return  { background:linear-gradient(135deg,#10B981,#34D399); }
+  .cc-name  { font-size:15px; font-weight:700; }
+  .cc-badge { font-size:11px; font-family:'DM Mono',monospace; padding:2px 9px; border-radius:20px; font-weight:600; }
+  .cc-badge.new      { background:#DBEAFE; color:#1E40AF; }
+  .cc-badge.returning{ background:#D1FAE5; color:#065F46; }
+  .cc-stats { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:8px; }
+  .cc-stat  { background:rgba(255,255,255,.6); border-radius:8px; padding:8px 10px; }
+  .cc-stat-label { font-size:10px; color:#6B7280; font-family:'DM Mono',monospace; text-transform:uppercase; }
+  .cc-stat-val   { font-size:14px; font-weight:700; color:#111827; margin-top:2px; }
+
+  /* Field groups */
+  .field-section { margin-bottom:20px; }
+  .field-section-title { font-size:11px; font-weight:600; color:var(--gray-light); letter-spacing:1px; text-transform:uppercase; font-family:'DM Mono',monospace; margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid var(--pink-border); }
+</style>
+{% endblock %}
+
+{% block content %}
+<form method="POST" action="{{ url_for('new_visit') }}" id="visit-form">
+  <div style="display:grid;grid-template-columns:1fr 320px;gap:20px;align-items:start">
+
+    <!-- LEFT: Details -->
+    <div class="section-card" style="margin-bottom:0">
+      <div class="section-head">
+        <div class="section-title">Visit Details</div>
+      </div>
+      <div style="padding:22px 24px">
+
+        <!-- STEP 1: Phone (triggers lookup) -->
+        <div class="field-section">
+          <div class="field-section-title">Step 1 — Customer Phone</div>
+          <div class="form-group" style="margin-bottom:12px">
+            <label class="form-label">Phone Number *</label>
+            <div class="phone-wrap">
+              <input type="tel" name="phone" id="phone-input" class="form-input"
+                     placeholder="Enter phone number..." required autocomplete="off"
+                     value="{{ prefill.phone if prefill else '' }}"
+                     oninput="onPhoneInput(this.value)" style="padding-right:40px">
+              <span class="phone-status" id="phone-status"></span>
+            </div>
+          </div>
+
+          <!-- Customer card — shown after lookup -->
+          <div class="customer-card" id="customer-card">
+            <div class="cc-top">
+              <div class="cc-avatar" id="cc-avatar"></div>
+              <div>
+                <div class="cc-name" id="cc-name"></div>
+                <span class="cc-badge" id="cc-badge"></span>
+              </div>
+            </div>
+            <div class="cc-stats" id="cc-stats" style="display:none"></div>
+          </div>
+        </div>
+
+        <!-- STEP 2: Customer Info -->
+        <div class="field-section">
+          <div class="field-section-title">Step 2 — Customer Info</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Full Name *</label>
+              <input type="text" name="name" id="f-name" class="form-input"
+                     placeholder="e.g. Priya Nair" required
+                     value="{{ prefill.name if prefill else '' }}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Email</label>
+              <input type="email" name="email" id="f-email" class="form-input"
+                     placeholder="priya@email.com"
+                     value="{{ prefill.email if prefill else '' }}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Age</label>
+              <input type="number" name="age" id="f-age" class="form-input"
+                     placeholder="25" min="5" max="100"
+                     value="{{ prefill.age if prefill else '' }}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Visit Date &amp; Time</label>
+              <input type="datetime-local" name="visit_date" id="f-date" class="form-input">
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 3: Payment + Notes -->
+        <div class="field-section" style="margin-bottom:0">
+          <div class="field-section-title">Step 3 — Payment &amp; Notes</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Payment Method *</label>
+              <select name="payment_method" class="form-select" required>
+                <option value="">Select...</option>
+                <option value="cash">💵 Cash</option>
+                <option value="upi">📱 UPI</option>
+                <option value="card">💳 Card</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Notes</label>
+              <input type="text" name="notes" class="form-input" placeholder="Any special notes...">
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- RIGHT: Treatments + Total -->
+    <div class="section-card">
+      <div class="section-head"><div class="section-title">Treatments</div></div>
+      <div style="padding:16px">
+        <div class="treatment-grid">
+          {% for t in treatments %}
+          <label class="treatment-item" id="tl-{{ t.id }}">
+            <input type="checkbox" name="treatments" value="{{ t.id }}" onchange="updateTotal()">
+            <div class="t-check" id="tc-{{ t.id }}">✓</div>
+            <div>
+              <div class="t-name">{{ t.name }}</div>
+              <div class="t-price">₹{{ t.price }}</div>
+            </div>
+          </label>
+          {% endfor %}
+        </div>
+
+        <div class="total-strip">
+          <div class="total-label">Total</div>
+          <div class="total-val" id="total-display">₹0</div>
+        </div>
+
+        <button type="submit" class="btn btn-pink"
+                style="width:100%;margin-top:14px;justify-content:center;padding:13px;font-size:14px">
+          💾 Save &amp; Generate Bill
+        </button>
+
+        <!-- Quick re-visit button (hidden until returning customer found) -->
+        <div id="revisit-tip" style="display:none;text-align:center;margin-top:10px;font-size:12px;color:var(--gray-light)">
+          Returning customer — previous treatments below for reference
+        </div>
+        <div id="prev-treatments" style="margin-top:8px"></div>
+      </div>
+    </div>
+
+  </div>
+</form>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const prices = { {% for t in treatments %}'{{ t.id }}': {{ t.price }},{% endfor %} };
+
+// Set default visit time to now
+document.getElementById('f-date').value = new Date(now.getTime() + 330*60*1000).toISOString().slice(0,16);
+
+// ── Treatment total ───────────────────────────────────
+function updateTotal() {
+  let total = 0;
+  document.querySelectorAll('input[name="treatments"]').forEach(cb => {
+    const lbl = document.getElementById('tl-' + cb.value);
+    const chk = document.getElementById('tc-' + cb.value);
+    if (cb.checked) {
+      total += parseFloat(prices[cb.value]) || 0;
+      lbl.classList.add('selected');
+      chk.textContent = '✓';
+    } else {
+      lbl.classList.remove('selected');
+      chk.textContent = '';
+    }
+  });
+  document.getElementById('total-display').textContent = '₹' + total.toLocaleString('en-IN');
+}
+
+// ── Phone Lookup ──────────────────────────────────────
+let lookupTimer = null;
+
+function onPhoneInput(val) {
+  clearTimeout(lookupTimer);
+  const phone = val.replace(/[\s\-\(\)]/g, '');
+  document.getElementById('phone-status').textContent = '';
+  hideCard();
+  if (phone.length < 10) return;
+  document.getElementById('phone-status').textContent = '⟳';
+  lookupTimer = setTimeout(() => doLookup(phone), 500);
+}
+
+function doLookup(phone) {
+  fetch('/api/lookup-phone?phone=' + encodeURIComponent(phone))
+    .then(r => r.json())
+    .then(data => {
+      document.getElementById('phone-status').textContent = data.found ? '✅' : '🆕';
+      if (data.found) showReturning(data);
+      else            showNew();
+    })
+    .catch(() => { document.getElementById('phone-status').textContent = ''; });
+}
+
+function showReturning(d) {
+  // Auto-fill identity fields
+  document.getElementById('f-name').value  = d.name;
+  document.getElementById('f-email').value = d.email || '';
+  document.getElementById('f-age').value   = d.age   || '';
+
+  // Card
+  const card   = document.getElementById('customer-card');
+  card.className = 'customer-card returning';
+  document.getElementById('cc-avatar').className = 'cc-avatar return';
+  document.getElementById('cc-avatar').textContent = d.name[0].toUpperCase();
+  document.getElementById('cc-name').textContent   = d.name;
+  const badge  = document.getElementById('cc-badge');
+  badge.className   = 'cc-badge returning';
+  badge.textContent = '🔁 Returning Customer · Visit #' + (d.total_visits + 1);
+
+  // Stats
+  const stats = document.getElementById('cc-stats');
+  stats.style.display = 'grid';
+  stats.innerHTML = `
+    <div class="cc-stat"><div class="cc-stat-label">Total Visits</div><div class="cc-stat-val">${d.total_visits}</div></div>
+    <div class="cc-stat"><div class="cc-stat-label">Total Spent</div><div class="cc-stat-val">₹${Number(d.total_spent).toLocaleString('en-IN')}</div></div>
+    <div class="cc-stat"><div class="cc-stat-label">Last Visit</div><div class="cc-stat-val">${d.last_visit}</div></div>`;
+
+  document.getElementById('revisit-tip').style.display = 'block';
+  showToast('Welcome back, ' + d.name + '! Visit #' + (d.total_visits+1), '🌸');
+}
+
+function showNew() {
+  // Clear fields for fresh entry
+  document.getElementById('f-name').value  = '';
+  document.getElementById('f-email').value = '';
+  document.getElementById('f-age').value   = '';
+
+  const card = document.getElementById('customer-card');
+  card.className = 'customer-card new-customer';
+  document.getElementById('cc-avatar').className = 'cc-avatar new';
+  document.getElementById('cc-avatar').textContent = '✦';
+  document.getElementById('cc-name').textContent   = 'New Customer';
+  const badge = document.getElementById('cc-badge');
+  badge.className = 'cc-badge new';
+  badge.textContent = '🆕 First Visit';
+  document.getElementById('cc-stats').style.display = 'none';
+  document.getElementById('revisit-tip').style.display = 'none';
+}
+
+function hideCard() {
+  document.getElementById('customer-card').className = 'customer-card';
+}
+
+// Pre-fill if coming from customer profile link
+{% if prefill %}
+document.getElementById('phone-status').textContent = '✅';
+showReturning({
+  name: '{{ prefill.name }}',
+  email: '{{ prefill.email or "" }}',
+  age: '{{ prefill.age or "" }}',
+  total_visits: {{ prefill.total_visits }},
+  total_spent: {{ prefill.total_spent }},
+  last_visit: '{{ prefill.last_visit.visit_date.strftime("%d %b %Y") if prefill.last_visit else "—" }}'
+});
+{% endif %}
+</script>
+{% endblock %}

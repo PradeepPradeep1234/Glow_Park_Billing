@@ -1,0 +1,185 @@
+{% extends 'base.html' %}
+{% block title %}Manage Staff – Glow Park{% endblock %}
+{% block page_title %}Manage Staff{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{{ url_for('register') }}" class="btn btn-pink">＋ Add Staff</a>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  .role-badge {
+    display:inline-flex; align-items:center; padding:4px 12px;
+    border-radius:20px; font-size:11px; font-weight:700;
+    font-family:'DM Mono',monospace; text-transform:uppercase; letter-spacing:.5px;
+  }
+  .role-admin   { background:linear-gradient(135deg,#FCE4F3,#F9C0E8); color:var(--pink-deep); }
+  .role-manager { background:#EDE9FE; color:#5B21B6; }
+  .role-staff   { background:#F1F5F9; color:#475569; }
+
+  .staff-avatar {
+    width:38px; height:38px; border-radius:50%;
+    background:linear-gradient(135deg,var(--pink),var(--pink-soft));
+    display:flex; align-items:center; justify-content:center;
+    font-size:14px; font-weight:700; color:#fff; flex-shrink:0;
+  }
+
+  .permission-chip {
+    display:inline-flex; align-items:center; gap:4px;
+    padding:3px 9px; border-radius:6px; font-size:11px;
+    font-weight:500; margin:2px;
+  }
+  .perm-yes { background:#D1FAE5; color:#065F46; }
+  .perm-no  { background:#FEE2E2; color:#991B1B; }
+
+  .delete-btn {
+    background:transparent; border:1.5px solid #FECACA; color:#EF4444;
+    border-radius:8px; padding:6px 14px; font-size:12px; font-weight:600;
+    cursor:pointer; font-family:'DM Sans',sans-serif; transition:all .16s;
+  }
+  .delete-btn:hover { background:#FEF2F2; border-color:#EF4444; }
+  .delete-btn:disabled { opacity:.4; cursor:not-allowed; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Summary strip -->
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:22px">
+  {% set admin_count   = staff_list | selectattr('role','equalto','admin')   | list | length %}
+  {% set manager_count = staff_list | selectattr('role','equalto','manager') | list | length %}
+  {% set staff_count   = staff_list | selectattr('role','equalto','staff')   | list | length %}
+
+  <div class="stat-card c-pink" style="padding:18px 20px">
+    <div class="stat-label">Total Accounts</div>
+    <div class="stat-value" style="font-size:28px">{{ staff_list|length }}</div>
+    <div class="stat-sub">Active users</div>
+  </div>
+  <div class="stat-card c-amber" style="padding:18px 20px">
+    <div class="stat-label">Admins / Managers</div>
+    <div class="stat-value" style="font-size:28px">{{ admin_count + manager_count }}</div>
+    <div class="stat-sub">Full access</div>
+  </div>
+  <div class="stat-card c-green" style="padding:18px 20px">
+    <div class="stat-label">Staff Members</div>
+    <div class="stat-value" style="font-size:28px">{{ staff_count }}</div>
+    <div class="stat-sub">Restricted access</div>
+  </div>
+</div>
+
+<!-- Permissions info card -->
+<div class="section-card" style="margin-bottom:20px">
+  <div class="section-head">
+    <div class="section-title">Role Permissions</div>
+  </div>
+  <div style="padding:20px 24px">
+    <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:0">
+      <!-- Header -->
+      <div style="font-size:10px;font-weight:600;color:var(--gray-light);letter-spacing:1px;text-transform:uppercase;font-family:'DM Mono',monospace;padding:8px 0;border-bottom:1px solid var(--pink-border)">Permission</div>
+      <div style="font-size:10px;font-weight:600;color:var(--gray-light);letter-spacing:1px;text-transform:uppercase;font-family:'DM Mono',monospace;padding:8px 0;text-align:center;border-bottom:1px solid var(--pink-border)">Admin</div>
+      <div style="font-size:10px;font-weight:600;color:var(--gray-light);letter-spacing:1px;text-transform:uppercase;font-family:'DM Mono',monospace;padding:8px 0;text-align:center;border-bottom:1px solid var(--pink-border)">Manager</div>
+      <div style="font-size:10px;font-weight:600;color:var(--gray-light);letter-spacing:1px;text-transform:uppercase;font-family:'DM Mono',monospace;padding:8px 0;text-align:center;border-bottom:1px solid var(--pink-border)">Staff</div>
+
+      {% set perms = [
+        ('Dashboard', True, True, True),
+        ('Add New Customer', True, True, True),
+        ('View Own Customers & Bills', True, True, True),
+        ('View All Customers & Bills', True, True, False),
+        ('Billing (All Transactions)', True, True, False),
+        ('Analytics Page', True, True, False),
+        ('Campaigns Page', True, True, False),
+        ('Manage Staff Accounts', True, False, False),
+        ('Add / Delete Staff', True, False, False),
+      ] %}
+
+      {% for label, adm, mgr, stf in perms %}
+      <div style="font-size:13px;color:var(--gray-dark);padding:11px 0;border-bottom:1px solid var(--pink-border)">{{ label }}</div>
+      <div style="text-align:center;padding:11px 0;border-bottom:1px solid var(--pink-border)">
+        <span class="permission-chip {{ 'perm-yes' if adm else 'perm-no' }}">{{ '✓ Yes' if adm else '✗ No' }}</span>
+      </div>
+      <div style="text-align:center;padding:11px 0;border-bottom:1px solid var(--pink-border)">
+        <span class="permission-chip {{ 'perm-yes' if mgr else 'perm-no' }}">{{ '✓ Yes' if mgr else '✗ No' }}</span>
+      </div>
+      <div style="text-align:center;padding:11px 0;border-bottom:1px solid var(--pink-border)">
+        <span class="permission-chip {{ 'perm-yes' if stf else 'perm-no' }}">{{ '✓ Yes' if stf else '✗ No' }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- Staff List -->
+<div class="section-card">
+  <div class="section-head">
+    <div class="section-title">All Staff Accounts</div>
+    <div class="section-actions">
+      <a href="{{ url_for('register') }}" class="btn btn-pink" style="font-size:12px;padding:7px 14px">＋ Add New</a>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Staff Member</th>
+          <th>Email</th>
+          <th>Role</th>
+          <th>Customers</th>
+          <th>Access</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in staff_list %}
+        <tr>
+          <td>
+            <div style="display:flex;align-items:center;gap:10px">
+              <div class="staff-avatar">{{ u.name[0].upper() }}</div>
+              <div>
+                <div style="font-weight:600;font-size:14px">
+                  {{ u.name }}
+                  {% if u.id == current_user.id %}
+                    <span style="font-size:10px;background:var(--pink-light);color:var(--pink);padding:2px 7px;border-radius:5px;font-weight:600;vertical-align:middle">You</span>
+                  {% endif %}
+                </div>
+                <div style="font-size:11px;color:var(--gray-light);font-family:'DM Mono',monospace">ID #{{ u.id }}</div>
+              </div>
+            </div>
+          </td>
+          <td style="font-size:13px;color:var(--gray-mid)">{{ u.email }}</td>
+          <td>
+            <span class="role-badge role-{{ u.role }}">{{ u.role }}</span>
+          </td>
+          <td style="font-size:13px">
+            <b>{{ u.customers | length }}</b>
+            <span style="font-size:11px;color:var(--gray-light)"> visits</span>
+          </td>
+          <td>
+            {% if u.role in ['admin','manager'] %}
+              <span class="permission-chip perm-yes">Full Access</span>
+            {% else %}
+              <span class="permission-chip perm-no">Own Customers Only</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if u.id != current_user.id %}
+            <form method="POST" action="{{ url_for('delete_staff', user_id=u.id) }}"
+                  onsubmit="return confirm('Remove {{ u.name }}? This cannot be undone.')">
+              <button type="submit" class="delete-btn">✕ Remove</button>
+            </form>
+            {% else %}
+            <button class="delete-btn" disabled title="Cannot delete yourself">✕ Remove</button>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6" style="text-align:center;padding:40px;color:var(--gray-light)">
+            No staff accounts yet. <a href="{{ url_for('register') }}" style="color:var(--pink)">Add one →</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

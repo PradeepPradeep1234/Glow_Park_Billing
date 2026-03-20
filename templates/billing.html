@@ -1,0 +1,138 @@
+{% extends 'base.html' %}
+{% block title %}Billing – Glow Park{% endblock %}
+{% block page_title %}Billing{% endblock %}
+
+{% block topbar_actions %}
+  <button class="btn btn-ghost" onclick="doExportCSV()">⬇ Export CSV</button>
+  <a href="{{ url_for('new_visit') }}" class="btn btn-pink">✦ New Visit</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="section-card">
+  <div class="section-head">
+    <div class="section-title">All Transactions</div>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Bill #</th>
+          <th>Customer</th>
+          <th>Phone</th>
+          <th>Visit</th>
+          <th>Treatments</th>
+          <th>Staff</th>
+          <th>Payment</th>
+          <th>Amount</th>
+          <th>Date</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {% for v in visits.items %}
+        <tr>
+          <td>
+            <span style="font-family:'DM Mono';font-size:12px;color:var(--pink)">
+              #GP{{ '%04d'|format(v.id) }}
+            </span>
+          </td>
+
+          <td>
+            <a href="{{ url_for('customer_profile', customer_id=v.customer.id) }}"
+               style="font-weight:700;color:var(--gray-dark);text-decoration:none">
+              {{ v.customer.name }}
+            </a>
+
+            {% if v.customer.is_returning %}
+              <span style="background:#D1FAE5;color:#065F46;padding:1px 6px;font-size:10px;border-radius:5px">↩ Return</span>
+            {% else %}
+              <span style="background:#DBEAFE;color:#1E40AF;padding:1px 6px;font-size:10px;border-radius:5px">★ New</span>
+            {% endif %}
+          </td>
+
+          <td style="font-family:'DM Mono';font-size:12px">
+            {{ v.customer.phone }}
+          </td>
+
+          <td style="font-family:'DM Mono';font-size:12px;color:var(--gray-light)">
+            #{{ v.customer.total_visits }}
+          </td>
+
+          <td>
+            {% for t in v.treatments %}
+              <span style="background:var(--pink-light);padding:2px 7px;border-radius:5px;font-size:11px;margin:1px">
+                {{ t.name }}
+              </span>
+            {% endfor %}
+          </td>
+
+          <td>{{ v.staff.name if v.staff else '—' }}</td>
+
+          <td>
+            <span class="badge b-{{ (v.payment_method or 'cash').lower() }}">
+              {{ (v.payment_method or 'CASH').upper() }}
+            </span>
+          </td>
+
+          <td><b style="color:var(--pink-deep)">₹{{ v.total_amount }}</b></td>
+
+          <td style="font-size:12px;color:var(--gray-light)">
+            {{ v.visit_date.strftime('%d %b, %I:%M %p') }}
+          </td>
+
+          <td>
+            <div style="display:flex;gap:5px">
+              <a href="{{ url_for('generate_bill', visit_id=v.id) }}" class="icon-btn">👁</a>
+              <a href="{{ url_for('download_bill', visit_id=v.id) }}" class="icon-btn">📄</a>
+              <button class="icon-btn wa"
+                onclick="sendWhatsApp('{{ v.customer.phone }}','{{ v.customer.name }}',{{ v.id }},'{{ v.total_amount }}')">💬</button>
+            </div>
+          </td>
+        </tr>
+
+        {% else %}
+        <tr>
+          <td colspan="10" style="text-align:center;padding:40px;color:var(--gray-light)">
+            No transactions found.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ✅ SAME AS DASHBOARD -->
+  {% if visits.pages > 1 %}
+  <div style="display:flex;align-items:center;justify-content:space-between;
+              padding:14px 20px;border-top:1px solid var(--pink-border);
+              background:var(--pink-pale)">
+
+    <span style="font-size:12px;color:var(--gray-light)">
+      Page {{ visits.page }} of {{ visits.pages }} · {{ visits.total }} records
+    </span>
+
+    <div style="display:flex;gap:6px">
+      {% if visits.has_prev %}
+        <a href="{{ url_for('billing_view', page=visits.prev_num) }}"
+           class="btn btn-ghost" style="padding:7px 14px;font-size:12px">
+           ← Prev
+        </a>
+      {% endif %}
+
+      {% if visits.has_next %}
+        <a href="{{ url_for('billing_view', page=visits.next_num) }}"
+           class="btn btn-pink" style="padding:7px 14px;font-size:12px">
+           Next →
+        </a>
+      {% endif %}
+    </div>
+
+  </div>
+  {% endif %}
+
+</div>
+
+{% endblock %}

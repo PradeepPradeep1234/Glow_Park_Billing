@@ -1,0 +1,378 @@
+{% extends 'base.html' %}
+{% block title %}Campaigns – Glow Park{% endblock %}
+{% block page_title %}Campaigns{% endblock %}
+
+{% block extra_head %}
+<style>
+  .campaign-grid {
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr));
+    gap:12px; margin-bottom:14px;
+  }
+  .campaign-card {
+    background:#fff; border:1.5px solid var(--pink-border);
+    border-radius:var(--radius); padding:18px; cursor:pointer;
+    transition:all .18s; position:relative; overflow:hidden; user-select:none;
+  }
+  .campaign-card:hover { border-color:var(--pink); transform:translateY(-2px); box-shadow:var(--shadow-md); }
+  .campaign-card.selected { border-color:var(--pink); background:var(--pink-light); box-shadow:0 4px 16px rgba(233,30,140,.15); }
+  .campaign-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:var(--pink); opacity:0; transition:opacity .16s; }
+  .campaign-card.selected::before, .campaign-card:hover::before { opacity:1; }
+  .cc-check { position:absolute; top:10px; right:10px; width:20px; height:20px; border-radius:50%; background:var(--pink); color:#fff; display:none; align-items:center; justify-content:center; font-size:11px; font-weight:700; }
+  .campaign-card.selected .cc-check { display:flex; }
+  .cc-icon  { font-size:24px; margin-bottom:7px; }
+  .cc-name  { font-family:'Playfair Display',serif; font-size:13px; font-weight:700; color:var(--gray-dark); margin-bottom:3px; }
+  .cc-count { font-size:11px; color:var(--gray-light); margin-bottom:8px; font-family:'DM Mono',monospace; }
+  .cc-stats { display:flex; justify-content:space-between; font-size:11px; }
+  .cc-rev   { font-weight:700; color:var(--pink-deep); }
+  .cc-pct   { color:var(--gray-mid); }
+  .prog-bar { height:3px; background:var(--pink-border); border-radius:2px; margin:7px 0 4px; }
+  .prog-fill{ height:100%; border-radius:2px; background:linear-gradient(90deg,var(--pink),#F472B6); }
+
+  /* Active filter strip */
+  .active-filters { display:none; align-items:center; gap:8px; flex-wrap:wrap; background:var(--pink-pale); border:1px solid var(--pink-border); border-radius:10px; padding:10px 14px; margin-bottom:12px; }
+  .active-filters.show { display:flex; }
+  .af-label { font-size:11px; font-weight:600; color:var(--gray-mid); font-family:'DM Mono',monospace; white-space:nowrap; }
+  .af-tag { display:inline-flex; align-items:center; gap:4px; background:var(--pink); color:#fff; border-radius:20px; padding:3px 10px; font-size:11px; font-weight:600; }
+  .af-tag button { background:none; border:none; color:#fff; cursor:pointer; font-size:14px; line-height:1; padding:0 0 0 2px; }
+  .af-clear { margin-left:auto; font-size:12px; color:var(--pink); cursor:pointer; font-weight:600; background:none; border:none; font-family:'DM Sans',sans-serif; text-decoration:underline; }
+
+  /* Mode buttons — 3 options */
+  .mode-wrap  { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .mode-label { font-size:12px; color:var(--gray-mid); white-space:nowrap; }
+  .mode-btn   { padding:5px 12px; border-radius:7px; font-size:11px; font-weight:600; cursor:pointer; border:1.5px solid var(--pink-border); background:#fff; color:var(--gray-mid); font-family:'DM Sans',sans-serif; transition:all .15s; white-space:nowrap; }
+  .mode-btn.active { background:var(--pink); color:#fff; border-color:var(--pink); }
+  .mode-hint { font-size:11px; color:var(--gray-light); font-family:'DM Mono',monospace; margin-top:4px; }
+
+  /* Filters */
+  .filter-bar   { display:flex; gap:10px; align-items:center; margin-bottom:14px; flex-wrap:wrap; }
+  .filter-input { background:#fff; border:1.5px solid var(--pink-border); border-radius:9px; padding:9px 13px; font-size:13px; font-family:'DM Sans',sans-serif; color:var(--gray-dark); outline:none; }
+  .filter-input:focus { border-color:var(--pink); }
+  .select-all-check { display:flex; align-items:center; gap:7px; font-size:13px; color:var(--gray-mid); cursor:pointer; }
+
+  /* Customer-grouped row highlight */
+  tr.cust-grouped td { background: var(--pink-pale) !important; }
+</style>
+{% endblock %}
+
+{% block topbar_actions %}
+  <button class="btn btn-outline" onclick="exportSelected()">⬇ Export Selected</button>
+  <button class="btn btn-pink"    onclick="exportAll()">⬇ Export All</button>
+{% endblock %}
+
+{% block content %}
+
+<!-- Header + Mode -->
+<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:12px">
+  <div>
+    <div style="font-family:'Playfair Display',serif;font-size:16px;font-weight:700">Treatment Campaigns</div>
+    <div style="font-size:12px;color:var(--gray-light);margin-top:2px">Click one or more treatments. Choose how to match below.</div>
+  </div>
+  <div>
+    <div class="mode-wrap">
+      <span class="mode-label">Match:</span>
+      <button class="mode-btn active" data-mode="or"       onclick="setMode(this)">Any (OR)</button>
+      <button class="mode-btn"        data-mode="and_visit" onclick="setMode(this)">Same Visit (AND)</button>
+      <button class="mode-btn"        data-mode="and_cust"  onclick="setMode(this)">Same Customer (AND)</button>
+    </div>
+    <div class="mode-hint" id="mode-hint">Show visits that had ANY of the selected treatments</div>
+  </div>
+</div>
+
+<!-- Campaign Cards -->
+<div class="campaign-grid" id="campaign-grid">
+  {% for t in treatment_stats %}
+  <div class="campaign-card" id="cc-{{ t.id }}" onclick="toggleCampaign({{ t.id }}, '{{ t.name }}')">
+    <div class="cc-check">✓</div>
+    <div class="cc-icon">{{ t.icon }}</div>
+    <div class="cc-name">{{ t.name }}</div>
+    <div class="cc-count">{{ t.count }} visits</div>
+    <div class="prog-bar"><div class="prog-fill" style="width:{{ t.pct }}%"></div></div>
+    <div class="cc-stats">
+      <span class="cc-rev">₹{{ t.revenue }}</span>
+      <span class="cc-pct">{{ t.pct }}%</span>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Active filter tags -->
+<div class="active-filters" id="active-filters">
+  <span class="af-label">Filtering by:</span>
+  <div id="af-tags" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+  <button class="af-clear" onclick="clearAll()">Clear all</button>
+</div>
+
+<!-- Search + Date -->
+<div class="filter-bar">
+  <input class="filter-input" type="text" id="camp-search"
+         placeholder="🔍  Search name or phone..." oninput="applyFilters()" style="min-width:200px">
+  <input class="filter-input" type="date" id="camp-from" onchange="applyFilters()">
+  <span style="color:var(--gray-light)">→</span>
+  <input class="filter-input" type="date" id="camp-to" onchange="applyFilters()">
+  <button class="btn btn-ghost" onclick="clearAll()">✕ Clear</button>
+  <span id="camp-count" style="font-size:12px;color:var(--gray-light);font-family:'DM Mono',monospace;margin-left:auto"></span>
+</div>
+
+<!-- Table -->
+<div class="section-card">
+  <div class="section-head">
+    <div class="section-title" id="camp-title">All Customers</div>
+    <div class="section-actions">
+      <label class="select-all-check">
+        <input type="checkbox" id="select-all" onchange="toggleSelectAll(this)"> Select All Visible
+      </label>
+      <button class="btn btn-ghost" onclick="exportSelected()" style="font-size:12px;padding:7px 14px">⬇ Export Selected</button>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th><input type="checkbox" onchange="toggleSelectAll(this)"></th>
+          <th>Customer</th>
+          <th>Phone</th>
+          <th>Email</th>
+          <th>Treatments</th>
+          <th>Amount</th>
+          <th>Payment</th>
+          <th>Visit Date</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="camp-body">
+        {% for v in visits %}
+        <tr data-id="{{ v.id }}"
+            data-customer-id="{{ v.customer.id }}"
+            data-search="{{ v.customer.name.lower() }} {{ v.customer.phone }}"
+            data-date="{{ v.visit_date.strftime('%Y-%m-%d') }}"
+            data-treatments="{{ v.treatments | map(attribute='id') | join(',') }}"
+            data-treatment-names="{{ v.treatments | map(attribute='name') | join(', ') }}">
+          <td><input type="checkbox" class="row-check" value="{{ v.id }}"></td>
+          <td>
+            <b>{{ v.customer.name }}</b>
+            {% if v.customer.is_returning %}
+              <span style="display:inline-block;background:#D1FAE5;color:#065F46;border-radius:5px;padding:1px 6px;font-size:10px;font-weight:600;margin-left:3px;font-family:'DM Mono',monospace">↩</span>
+            {% endif %}
+          </td>
+          <td style="font-family:'DM Mono',monospace;font-size:12px">{{ v.customer.phone }}</td>
+          <td style="font-size:12px;color:var(--gray-light)">{{ v.customer.email or '—' }}</td>
+          <td>
+            {% for t in v.treatments %}
+              <span style="display:inline-block;background:var(--pink-light);color:var(--pink-deep);border-radius:5px;padding:2px 7px;font-size:11px;margin:1px">{{ t.name }}</span>
+            {% endfor %}
+          </td>
+          <td><b style="color:var(--pink-deep)">₹{{ v.total_amount }}</b></td>
+          <td><span class="badge b-{{ (v.payment_method or 'cash').lower() }}">{{ (v.payment_method or 'CASH').upper() }}</span></td>
+          <td style="font-size:12px;color:var(--gray-light)">{{ v.visit_date.strftime('%d %b %Y') }}</td>
+          <td>
+            <div style="display:flex;gap:5px">
+              <button class="icon-btn wa"
+                onclick="sendWhatsApp('{{ v.customer.phone }}','{{ v.customer.name }}',{{ v.id }},'{{ v.total_amount }}')"
+                title="WhatsApp">💬</button>
+              <a href="{{ url_for('generate_bill', visit_id=v.id) }}" class="icon-btn" title="View Bill">👁</a>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" style="text-align:center;padding:36px;color:var(--gray-light)">No visits found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// ── State ─────────────────────────────────────────────
+const selectedTreatments = new Set();   // string IDs
+const treatmentNames     = {};           // id → name
+let   filterMode         = 'or';
+
+const MODE_HINTS = {
+  or:        'Show visits that had ANY of the selected treatments',
+  and_visit: 'Show only visits where ALL selected treatments were done in the SAME visit',
+  and_cust:  'Show all visits of customers who have done ALL selected treatments across any visit',
+};
+
+// Build id → name map
+document.querySelectorAll('.campaign-card').forEach(card => {
+  const id   = card.id.replace('cc-', '');
+  const name = card.querySelector('.cc-name').textContent.trim();
+  treatmentNames[id] = name;
+});
+
+// ── Mode ─────────────────────────────────────────────
+function setMode(btn) {
+  filterMode = btn.dataset.mode;
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('mode-hint').textContent = MODE_HINTS[filterMode];
+  applyFilters();
+}
+
+// ── Card toggle ───────────────────────────────────────
+function toggleCampaign(id, name) {
+  const sid  = String(id);
+  const card = document.getElementById('cc-' + sid);
+  if (selectedTreatments.has(sid)) {
+    selectedTreatments.delete(sid);
+    card.classList.remove('selected');
+  } else {
+    selectedTreatments.add(sid);
+    card.classList.add('selected');
+  }
+  updateStrip();
+  applyFilters();
+}
+
+// ── Tag strip ─────────────────────────────────────────
+function updateStrip() {
+  const strip = document.getElementById('active-filters');
+  const tags  = document.getElementById('af-tags');
+  if (selectedTreatments.size === 0) {
+    strip.classList.remove('show');
+    tags.innerHTML = '';
+    document.getElementById('camp-title').textContent = 'All Customers';
+    return;
+  }
+  strip.classList.add('show');
+  tags.innerHTML = [...selectedTreatments].map(id => `
+    <span class="af-tag">
+      ${treatmentNames[id] || id}
+      <button onclick="removeTag('${id}')" title="Remove">×</button>
+    </span>`).join('');
+  const names = [...selectedTreatments].map(id => treatmentNames[id] || id);
+  document.getElementById('camp-title').textContent =
+    names.length === 1 ? names[0] + ' Customers'
+    : names.slice(0,-1).join(', ') + ' & ' + names[names.length-1];
+}
+
+function removeTag(id) {
+  selectedTreatments.delete(String(id));
+  const card = document.getElementById('cc-' + id);
+  if (card) card.classList.remove('selected');
+  updateStrip();
+  applyFilters();
+}
+
+// ── Core filter ───────────────────────────────────────
+function applyFilters() {
+  const q  = (document.getElementById('camp-search').value || '').toLowerCase().trim();
+  const df = document.getElementById('camp-from').value;
+  const dt = document.getElementById('camp-to').value;
+
+  const allRows = [...document.querySelectorAll('#camp-body tr[data-id]')];
+
+  // ── For "Same Customer (AND)" mode ──
+  // Pre-build: customerId → Set of ALL treatment IDs across ALL their visits
+  let custTreatmentMap = {};
+  if (filterMode === 'and_cust' && selectedTreatments.size > 0) {
+    allRows.forEach(row => {
+      const cid = row.dataset.customerId;
+      if (!custTreatmentMap[cid]) custTreatmentMap[cid] = new Set();
+      const rowT = row.dataset.treatments ? row.dataset.treatments.split(',') : [];
+      rowT.forEach(t => custTreatmentMap[cid].add(t));
+    });
+  }
+
+  let visible = 0;
+
+  allRows.forEach(row => {
+    // ── Treatment match ──
+    let matchT = true;
+    if (selectedTreatments.size > 0) {
+      const rowT = row.dataset.treatments ? row.dataset.treatments.split(',') : [];
+
+      if (filterMode === 'or') {
+        // ANY selected treatment in this visit
+        matchT = [...selectedTreatments].some(id => rowT.includes(id));
+
+      } else if (filterMode === 'and_visit') {
+        // ALL selected treatments in THIS single visit
+        matchT = [...selectedTreatments].every(id => rowT.includes(id));
+
+      } else if (filterMode === 'and_cust') {
+        // ALL selected treatments exist across any visit by this CUSTOMER
+        const cid       = row.dataset.customerId;
+        const custAll   = custTreatmentMap[cid] || new Set();
+        matchT = [...selectedTreatments].every(id => custAll.has(id));
+      }
+    }
+
+    const matchQ = !q  || (row.dataset.search || '').includes(q);
+    const d      = row.dataset.date || '';
+    const matchD = (!df || d >= df) && (!dt || d <= dt);
+    const show   = matchT && matchQ && matchD;
+
+    row.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+
+  const total  = allRows.length;
+  const active = selectedTreatments.size > 0 || q || df || dt;
+  document.getElementById('camp-count').textContent =
+    active ? `${visible} of ${total} visits` : `${total} visits`;
+}
+
+// ── Clear ─────────────────────────────────────────────
+function clearAll() {
+  selectedTreatments.clear();
+  document.querySelectorAll('.campaign-card').forEach(c => c.classList.remove('selected'));
+  document.getElementById('camp-search').value = '';
+  document.getElementById('camp-from').value   = '';
+  document.getElementById('camp-to').value     = '';
+  updateStrip();
+  applyFilters();
+}
+
+// ── Row checkboxes ────────────────────────────────────
+function toggleSelectAll(cb) {
+  document.querySelectorAll('.row-check').forEach(c => {
+    if (c.closest('tr').style.display !== 'none') c.checked = cb.checked;
+  });
+}
+
+// ── CSV builder ───────────────────────────────────────
+function buildCSV(onlySelected) {
+  const rows = [['Customer','Phone','Email','Treatments','Amount','Payment','Date']];
+  document.querySelectorAll('#camp-body tr[data-id]').forEach(row => {
+    if (row.style.display === 'none') return;
+    const cb = row.querySelector('.row-check');
+    if (onlySelected && !cb.checked) return;
+    const td = row.querySelectorAll('td');
+    const nameEl   = td[1] ? td[1].querySelector('b') : null;
+    const amountEl = td[5] ? td[5].querySelector('b') : null;
+    rows.push([
+      nameEl   ? nameEl.textContent.trim()   : '',
+      td[2]    ? td[2].textContent.trim()    : '',
+      td[3]    ? td[3].textContent.trim()    : '',
+      td[4]    ? [...td[4].querySelectorAll('span')].map(s => s.textContent.trim()).join('; ') : '',
+      amountEl ? amountEl.textContent.trim() : '',
+      td[6]    ? td[6].textContent.trim()    : '',
+      td[7]    ? td[7].textContent.trim()    : '',
+    ]);
+  });
+  return rows.map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\n');
+}
+
+function exportSelected() {
+  const checked = [...document.querySelectorAll('.row-check')]
+    .filter(cb => cb.checked && cb.closest('tr').style.display !== 'none');
+  if (checked.length === 0) { showToast('No rows selected — tick checkboxes first', '⚠️'); return; }
+  exportCSV(buildCSV(true), 'campaign-selected-' + new Date().toISOString().slice(0,10) + '.csv');
+  showToast(checked.length + ' rows exported!', '📥');
+}
+
+function exportAll() {
+  const visible = [...document.querySelectorAll('#camp-body tr[data-id]')]
+    .filter(r => r.style.display !== 'none');
+  if (visible.length === 0) { showToast('No visible rows to export', '⚠️'); return; }
+  exportCSV(buildCSV(false), 'campaign-all-' + new Date().toISOString().slice(0,10) + '.csv');
+  showToast(visible.length + ' rows exported!', '📥');
+}
+
+// ── Init ──────────────────────────────────────────────
+applyFilters();
+</script>
+{% endblock %}
