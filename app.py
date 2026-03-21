@@ -20,11 +20,11 @@ app.config['MAIL_SERVER']   = 'smtp.gmail.com'
 app.config['MAIL_PORT']     = 587
 app.config['MAIL_USE_TLS']  = True
 app.config['MAIL_USE_SSL']  = False
-app.config['MAIL_USERNAME'] = 'pradeeppardeep65@gmail.com'
-app.config['MAIL_PASSWORD'] = 'scacfyggqpplbfte'
+app.config['MAIL_USERNAME'] = ''
+app.config['MAIL_PASSWORD'] = ''
 mail = Mail(app)
 
-app.config['SECRET_KEY']              = 'glowpark@123'
+app.config['SECRET_KEY']              = 'your_key'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///glowpark.db'
 db     = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
