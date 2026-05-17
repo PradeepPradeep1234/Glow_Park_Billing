@@ -73,6 +73,10 @@
           <span>{{ visit.customer.age or '—' }}</span>
         </div>
         <div class="meta-group">
+          <label>Gender</label>
+          <span>{{ visit.customer.gender or '—' }}</span>
+        </div>
+        <div class="meta-group">
           <label>Visit Date &amp; Time</label>
           <span>{{ visit.visit_date.strftime('%d %b %Y, %I:%M %p') }}</span>
         </div>

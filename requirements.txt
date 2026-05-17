@@ -4,3 +4,6 @@ Flask-Login
 pymysql
 flask_bcrypt
 reportlab
+python-dotenv
+Flask-Migrate
+Flask-Mail
