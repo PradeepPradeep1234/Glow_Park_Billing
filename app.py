@@ -23,17 +23,17 @@ from dotenv import load_dotenv
 # Load variables from .env file
 load_dotenv()
 app = Flask(__name__)
-app.config['SERVER_NAME'] = '127.0.0.1:5000'
-app.config['MAIL_SERVER']   = 'smtp.gmail.com'
-app.config['MAIL_PORT']     = 587
-app.config['MAIL_USE_TLS']  = True
-app.config['MAIL_USE_SSL']  = False
-app.config['MAIL_USERNAME'] = 'pradeeppardeep65@gmail.com'
-app.config['MAIL_PASSWORD'] = 'scacfyggqpplbfte'
+app.config['SERVER_NAME'] = os.getenv('SERVER_NAME', 'localhost:5000')
+app.config['MAIL_SERVER']   = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
+app.config['MAIL_PORT']     = int(os.getenv('MAIL_PORT', 587))
+app.config['MAIL_USE_TLS']  = os.getenv('MAIL_USE_TLS', 'True')
+app.config['MAIL_USE_SSL']  = os.getenv('MAIL_USE_SSL', 'False')
+app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME')
+app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
 mail = Mail(app)
 
-app.config['SECRET_KEY']              = os.getenv('SECRET_KEY', 'default_secret_key')
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///glowpark.db'
+app.config['SECRET_KEY']              = os.getenv('SECRET_KEY')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
 db     = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
 lm     = LoginManager()
