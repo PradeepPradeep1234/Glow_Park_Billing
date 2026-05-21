@@ -74,7 +74,7 @@ block page_title %}Billing{% endblock %} {% block topbar_actions %}
                 text-decoration: none;
               "
             >
-              {{ v.customer.name }}
+              {{ (v.customer.name).capitalize() }}
             </a>
 
             {% if v.customer.is_returning %}
