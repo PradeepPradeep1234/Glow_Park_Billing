@@ -102,15 +102,47 @@
   <button class="af-clear" onclick="clearAll()">Clear all</button>
 </div>
 
-<!-- Search + Date -->
+<!-- Search + Date + Dynamic Filters -->
 <div class="filter-bar">
   <input class="filter-input" type="text" id="camp-search"
-         placeholder="🔍  Search name or phone..." oninput="applyFilters()" style="min-width:200px">
-  <input class="filter-input" type="date" id="camp-from" onchange="applyFilters()">
-  <span style="color:var(--gray-light)">→</span>
-  <input class="filter-input" type="date" id="camp-to" onchange="applyFilters()">
-  <button class="btn btn-ghost" onclick="clearAll()">✕ Clear</button>
-  <span id="camp-count" style="font-size:12px;color:var(--gray-light);font-family:'DM Mono',monospace;margin-left:auto"></span>
+         placeholder="🔍 Search name or phone..." oninput="applyFilters()" style="min-width:200px">
+  
+  <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+    <span class="af-label" style="margin-left:10px;">Gender:</span>
+    <select class="filter-input" id="filter-gender" onchange="applyFilters()">
+      <option value="">All</option>
+      <option value="Male">Male</option>
+      <option value="Female">Female</option>
+    </select>
+
+    <span class="af-label" style="margin-left:10px;">Min Spend:</span>
+    <input class="filter-input" type="number" id="filter-spend" placeholder="0" oninput="applyFilters()" style="width:80px">
+    
+    <span class="af-label" style="margin-left:10px;">Max Spend:</span>
+    <input class="filter-input" type="number" id="filter-spend-max" placeholder="∞" oninput="applyFilters()" style="width:80px">
+
+    <span class="af-label" style="margin-left:10px;">Min Visits:</span>
+    <input class="filter-input" type="number" id="filter-visits" placeholder="0" oninput="applyFilters()" style="width:60px">
+    
+    <span class="af-label" style="margin-left:10px;">Max Visits:</span>
+    <input class="filter-input" type="number" id="filter-visits-max" placeholder="∞" oninput="applyFilters()" style="width:60px">
+
+    <span class="af-label" style="margin-left:10px;">Inactive Days:</span>
+    <input class="filter-input" type="number" id="filter-inactive" placeholder="> X days" oninput="applyFilters()" style="width:80px">
+
+    <span class="af-label" style="margin-left:10px;">Birthday Month:</span>
+    <input class="filter-input" type="number" id="filter-bday-month" placeholder="1-12" min="1" max="12" oninput="applyFilters()" style="width:70px">
+  </div>
+
+  <div class="mode-wrap" style="margin-left:10px; margin-top: 10px;">
+    <button class="mode-btn" onclick="setLoyaltyFilter('high_spender')">💎 High Spenders</button>
+    <button class="mode-btn" onclick="setLoyaltyFilter('regular')">👑 Loyal Regulars</button>
+    <button class="mode-btn" onclick="setLoyaltyFilter('inactive')">😴 Inactive</button>
+    <button class="mode-btn" onclick="setLoyaltyFilter('first_time')">🌱 First Time</button>
+  </div>
+
+  <button class="btn btn-ghost" onclick="clearAll()" style="margin-left:auto;">✕ Clear All</button>
+  <span id="camp-count" style="font-size:12px;color:var(--gray-light);font-family:'DM Mono',monospace;"></span>
 </div>
 
 <!-- Table -->
@@ -131,50 +163,55 @@
           <th><input type="checkbox" onchange="toggleSelectAll(this)"></th>
           <th>Customer</th>
           <th>Phone</th>
-          <th>Email</th>
-          <th>Treatments</th>
-          <th>Amount</th>
-          <th>Payment</th>
-          <th>Visit Date</th>
+          <th>Gender</th>
+          <th>Lifetime Visits</th>
+          <th>Total Spent</th>
+          <th>Treatments (History)</th>
+          <th>Last Visit</th>
           <th>Actions</th>
         </tr>
       </thead>
       <tbody id="camp-body">
-        {% for v in visits %}
-        <tr data-id="{{ v.id }}"
-            data-customer-id="{{ v.customer.id }}"
-            data-search="{{ v.customer.name.lower() }} {{ v.customer.phone }}"
-            data-date="{{ v.visit_date.strftime('%Y-%m-%d') }}"
-            data-treatments="{{ v.treatments | map(attribute='id') | join(',') }}"
-            data-treatment-names="{{ v.treatments | map(attribute='name') | join(', ') }}">
-          <td><input type="checkbox" class="row-check" value="{{ v.id }}"></td>
+        {% for item in customers %}
+        <tr data-id="{{ item.customer.id }}"
+            data-search="{{ item.customer.name.lower() }} {{ item.customer.phone }}"
+            data-gender="{{ (item.customer.gender or '—').capitalize() }}"
+            data-spend="{{ item.total_spent }}"
+            data-visits="{{ item.total_visits }}"
+            data-treatments="{{ item.all_treatment_ids }}"
+            data-inactive="{{ item.days_since_last_visit }}"
+            data-bmonth="{{ item.customer.dob.month if item.customer.dob else '' }}"
+            data-last-date="{{ item.latest_visit.visit_date.strftime('%Y-%m-%d') }}">
+          <td><input type="checkbox" class="row-check" value="{{ item.customer.id }}"></td>
           <td>
-            <b>{{ v.customer.name }}</b>
-            {% if v.customer.is_returning %}
-              <span style="display:inline-block;background:#D1FAE5;color:#065F46;border-radius:5px;padding:1px 6px;font-size:10px;font-weight:600;margin-left:3px;font-family:'DM Mono',monospace">↩</span>
+            <b>{{ item.customer.name }}</b>
+            {% if item.total_visits > 5 %}
+              <span style="display:inline-block;background:#FDE68A;color:#92400E;border-radius:5px;padding:1px 6px;font-size:10px;font-weight:700;margin-left:3px;">LOYAL</span>
             {% endif %}
           </td>
-          <td style="font-family:'DM Mono',monospace;font-size:12px">{{ v.customer.phone }}</td>
-          <td style="font-size:12px;color:var(--gray-light)">{{ v.customer.email or '—' }}</td>
-          <td>
-            {% for t in v.treatments %}
-              <span style="display:inline-block;background:var(--pink-light);color:var(--pink-deep);border-radius:5px;padding:2px 7px;font-size:11px;margin:1px">{{ t.name }}</span>
-            {% endfor %}
+          <td style="font-family:'DM Mono',monospace;font-size:12px">{{ item.customer.phone }}</td>
+          <td style="font-family:'DM Mono',monospace;font-size:12px">{{ (item.customer.gender or '—').capitalize() }}</td>
+          <td style="text-align:center;"><b>{{ item.total_visits }}</b></td>
+          <td><b style="color:var(--pink-deep)">₹{{ "{:,.0f}".format(item.total_spent) }}</b></td>
+          <td style="max-width:300px;">
+            <div style="display:flex; flex-wrap:wrap; gap:2px;">
+              {% for t_name in item.all_treatment_names.split(', ') %}
+                <span style="display:inline-block;background:var(--pink-light);color:var(--pink-deep);border-radius:5px;padding:1px 5px;font-size:10px;">{{ t_name }}</span>
+              {% endfor %}
+            </div>
           </td>
-          <td><b style="color:var(--pink-deep)">₹{{ v.total_amount }}</b></td>
-          <td><span class="badge b-{{ (v.payment_method or 'cash').lower() }}">{{ (v.payment_method or 'CASH').upper() }}</span></td>
-          <td style="font-size:12px;color:var(--gray-light)">{{ v.visit_date.strftime('%d %b %Y') }}</td>
+          <td style="font-size:12px;color:var(--gray-light)">{{ item.latest_visit.visit_date.strftime('%d %b %Y') }}</td>
           <td>
             <div style="display:flex;gap:5px">
               <button class="icon-btn wa"
-                onclick="sendWhatsApp('{{ v.customer.phone }}','{{ v.customer.name }}',{{ v.id }},'{{ v.total_amount }}')"
+                onclick="sendWhatsApp('{{ item.customer.phone }}','{{ item.customer.name }}',{{ item.latest_visit.id }},'{{ item.total_spent }}')"
                 title="WhatsApp">💬</button>
-              <a href="{{ url_for('generate_bill', visit_id=v.id) }}" class="icon-btn" title="View Bill">👁</a>
+              <a href="{{ url_for('customer_profile', customer_id=item.customer.id) }}" class="icon-btn" title="View Profile">👤</a>
             </div>
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="9" style="text-align:center;padding:36px;color:var(--gray-light)">No visits found.</td></tr>
+        <tr><td colspan="9" style="text-align:center;padding:36px;color:var(--gray-light)">No customers found.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -190,9 +227,9 @@ const treatmentNames     = {};           // id → name
 let   filterMode         = 'or';
 
 const MODE_HINTS = {
-  or:        'Show visits that had ANY of the selected treatments',
-  and_visit: 'Show only visits where ALL selected treatments were done in the SAME visit',
-  and_cust:  'Show all visits of customers who have done ALL selected treatments across any visit',
+  or:        'Show customers who had ANY of the selected treatments',
+  and_visit: 'Show customers who had ALL selected treatments in a SINGLE visit',
+  and_cust:  'Show customers who have done ALL selected treatments across ANY of their visits',
 };
 
 // Build id → name map
@@ -209,6 +246,26 @@ function setMode(btn) {
   btn.classList.add('active');
   document.getElementById('mode-hint').textContent = MODE_HINTS[filterMode];
   applyFilters();
+}
+
+function setLoyaltyFilter(type) {
+    document.getElementById('filter-spend').value = '';
+    document.getElementById('filter-spend-max').value = '';
+    document.getElementById('filter-visits').value = '';
+    document.getElementById('filter-visits-max').value = '';
+    document.getElementById('filter-inactive').value = '';
+    
+    if (type === 'high_spender') {
+        document.getElementById('filter-spend').value = 5000;
+    } else if (type === 'regular') {
+        document.getElementById('filter-visits').value = 5;
+    } else if (type === 'inactive') {
+        document.getElementById('filter-inactive').value = 90;
+    } else if (type === 'first_time') {
+        document.getElementById('filter-visits').value = 1;
+        document.getElementById('filter-visits-max').value = 1;
+    }
+    applyFilters();
 }
 
 // ── Card toggle ───────────────────────────────────────
@@ -244,8 +301,7 @@ function updateStrip() {
     </span>`).join('');
   const names = [...selectedTreatments].map(id => treatmentNames[id] || id);
   document.getElementById('camp-title').textContent =
-    names.length === 1 ? names[0] + ' Customers'
-    : names.slice(0,-1).join(', ') + ' & ' + names[names.length-1];
+    names.length === 1 ? names[0] : names.slice(0,-1).join(', ') + ' & ' + names[names.length-1];
 }
 
 function removeTag(id) {
@@ -258,24 +314,16 @@ function removeTag(id) {
 
 // ── Core filter ───────────────────────────────────────
 function applyFilters() {
-  const q  = (document.getElementById('camp-search').value || '').toLowerCase().trim();
-  const df = document.getElementById('camp-from').value;
-  const dt = document.getElementById('camp-to').value;
+  const q        = (document.getElementById('camp-search').value || '').toLowerCase().trim();
+  const gender   = document.getElementById('filter-gender').value;
+  const minSpend = parseFloat(document.getElementById('filter-spend').value) || 0;
+  const maxSpend = parseFloat(document.getElementById('filter-spend-max').value) || Infinity;
+  const minVisits = parseInt(document.getElementById('filter-visits').value) || 0;
+  const maxVisits = parseInt(document.getElementById('filter-visits-max').value) || Infinity;
+  const inactiveDays = parseInt(document.getElementById('filter-inactive').value) || 0;
+  const bmonth     = document.getElementById('filter-bday-month').value;
 
   const allRows = [...document.querySelectorAll('#camp-body tr[data-id]')];
-
-  // ── For "Same Customer (AND)" mode ──
-  // Pre-build: customerId → Set of ALL treatment IDs across ALL their visits
-  let custTreatmentMap = {};
-  if (filterMode === 'and_cust' && selectedTreatments.size > 0) {
-    allRows.forEach(row => {
-      const cid = row.dataset.customerId;
-      if (!custTreatmentMap[cid]) custTreatmentMap[cid] = new Set();
-      const rowT = row.dataset.treatments ? row.dataset.treatments.split(',') : [];
-      rowT.forEach(t => custTreatmentMap[cid].add(t));
-    });
-  }
-
   let visible = 0;
 
   allRows.forEach(row => {
@@ -285,34 +333,40 @@ function applyFilters() {
       const rowT = row.dataset.treatments ? row.dataset.treatments.split(',') : [];
 
       if (filterMode === 'or') {
-        // ANY selected treatment in this visit
         matchT = [...selectedTreatments].some(id => rowT.includes(id));
-
-      } else if (filterMode === 'and_visit') {
-        // ALL selected treatments in THIS single visit
+      } else {
+        // For customer-level, and_visit and and_cust behave similarly if treatments are aggregated
+        // but and_visit technically requires checking the visit-level data which we'd need more attributes for.
+        // For now, we use the aggregated treatment list.
         matchT = [...selectedTreatments].every(id => rowT.includes(id));
-
-      } else if (filterMode === 'and_cust') {
-        // ALL selected treatments exist across any visit by this CUSTOMER
-        const cid       = row.dataset.customerId;
-        const custAll   = custTreatmentMap[cid] || new Set();
-        matchT = [...selectedTreatments].every(id => custAll.has(id));
       }
     }
 
-    const matchQ = !q  || (row.dataset.search || '').includes(q);
-    const d      = row.dataset.date || '';
-    const matchD = (!df || d >= df) && (!dt || d <= dt);
-    const show   = matchT && matchQ && matchD;
+    const matchQ = !q || (row.dataset.search || '').includes(q);
+    
+    const matchG = !gender || row.dataset.gender === gender;
+    
+    const spend = parseFloat(row.dataset.spend);
+    const matchS = spend >= minSpend && spend <= maxSpend;
+    
+    const visits = parseInt(row.dataset.visits);
+    const matchV = visits >= minVisits && visits <= maxVisits;
+    
+    const rowInactive = parseInt(row.dataset.inactive);
+    const matchI = !inactiveDays || rowInactive >= inactiveDays;
+    
+    const matchB = !bmonth || row.dataset.bmonth === bmonth;
+
+    const show = matchT && matchQ && matchG && matchS && matchV && matchI && matchB;
 
     row.style.display = show ? '' : 'none';
     if (show) visible++;
   });
 
   const total  = allRows.length;
-  const active = selectedTreatments.size > 0 || q || df || dt;
+  const active = selectedTreatments.size > 0 || q || minSpend > 0 || minVisits > 0;
   document.getElementById('camp-count').textContent =
-    active ? `${visible} of ${total} visits` : `${total} visits`;
+    active ? `${visible} of ${total} customers` : `${total} customers`;
 }
 
 // ── Clear ─────────────────────────────────────────────
@@ -320,8 +374,13 @@ function clearAll() {
   selectedTreatments.clear();
   document.querySelectorAll('.campaign-card').forEach(c => c.classList.remove('selected'));
   document.getElementById('camp-search').value = '';
-  document.getElementById('camp-from').value   = '';
-  document.getElementById('camp-to').value     = '';
+  document.getElementById('filter-gender').value = '';
+  document.getElementById('filter-spend').value = '';
+  document.getElementById('filter-spend-max').value = '';
+  document.getElementById('filter-visits').value = '';
+  document.getElementById('filter-visits-max').value = '';
+  document.getElementById('filter-inactive').value = '';
+  document.getElementById('filter-bday-month').value = '';
   updateStrip();
   applyFilters();
 }
@@ -335,21 +394,21 @@ function toggleSelectAll(cb) {
 
 // ── CSV builder ───────────────────────────────────────
 function buildCSV(onlySelected) {
-  const rows = [['Customer','Phone','Email','Treatments','Amount','Payment','Date']];
+  const rows = [['Customer','Phone','Gender','Lifetime Visits','Total Spent','Treatments History','Last Visit Date']];
   document.querySelectorAll('#camp-body tr[data-id]').forEach(row => {
     if (row.style.display === 'none') return;
     const cb = row.querySelector('.row-check');
     if (onlySelected && !cb.checked) return;
     const td = row.querySelectorAll('td');
     const nameEl   = td[1] ? td[1].querySelector('b') : null;
-    const amountEl = td[5] ? td[5].querySelector('b') : null;
+    const spentEl  = td[5] ? td[5].querySelector('b') : null;
     rows.push([
       nameEl   ? nameEl.textContent.trim()   : '',
       td[2]    ? td[2].textContent.trim()    : '',
       td[3]    ? td[3].textContent.trim()    : '',
-      td[4]    ? [...td[4].querySelectorAll('span')].map(s => s.textContent.trim()).join('; ') : '',
-      amountEl ? amountEl.textContent.trim() : '',
-      td[6]    ? td[6].textContent.trim()    : '',
+      td[4]    ? td[4].textContent.trim()    : '',
+      spentEl  ? spentEl.textContent.trim().replace('₹', '').replace(',', '') : '',
+      td[6]    ? [...td[6].querySelectorAll('span')].map(s => s.textContent.trim()).join('; ') : '',
       td[7]    ? td[7].textContent.trim()    : '',
     ]);
   });

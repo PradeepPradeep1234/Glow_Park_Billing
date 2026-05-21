@@ -3,6 +3,9 @@ from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, date, timedelta
 from flask_bcrypt import Bcrypt
 from flask import flash
+from flask import make_response
+import csv
+from io import TextIOWrapper
 from flask_migrate import Migrate
 import os
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user, UserMixin
@@ -17,20 +20,20 @@ from flask_mail import Mail, Message
 import io
 from dotenv import load_dotenv
 
-
 # Load variables from .env file
 load_dotenv()
 app = Flask(__name__)
-app.config['MAIL_SERVER']   = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
-app.config['MAIL_PORT']     = int(os.environ.get('MAIL_PORT', 587))
-app.config['MAIL_USE_TLS']  = os.environ.get('MAIL_USE_TLS', 'True') == 'True'
-app.config['MAIL_USE_SSL']  = os.environ.get('MAIL_USE_SSL', 'False') == 'True'
-app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
-app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
+app.config['SERVER_NAME'] = '127.0.0.1:5000'
+app.config['MAIL_SERVER']   = 'smtp.gmail.com'
+app.config['MAIL_PORT']     = 587
+app.config['MAIL_USE_TLS']  = True
+app.config['MAIL_USE_SSL']  = False
+app.config['MAIL_USERNAME'] = 'pradeeppardeep65@gmail.com'
+app.config['MAIL_PASSWORD'] = 'scacfyggqpplbfte'
 mail = Mail(app)
 
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'fallback_key_for_local_dev')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///glowpark.db')
+app.config['SECRET_KEY']              = os.getenv('SECRET_KEY', 'default_secret_key')
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///glowpark.db'
 db     = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
 lm     = LoginManager()
@@ -67,17 +70,34 @@ def load_user(user_id):
     return User.query.get(int(user_id))
 
 
+from itsdangerous import URLSafeTimedSerializer
+
+s = URLSafeTimedSerializer(app.config['SECRET_KEY'])
+
 class User(db.Model, UserMixin):
-    """Staff / Admin accounts."""
     id       = db.Column(db.Integer, primary_key=True)
     name     = db.Column(db.String(100), nullable=False)
     email    = db.Column(db.String(100), unique=True, nullable=False)
     password = db.Column(db.String(100), nullable=False)
-    role     = db.Column(db.String(20), nullable=False, default=ROLE_STAFF)
+    role     = db.Column(db.String(20), nullable=False)
+
+    def get_reset_token(self):
+        return s.dumps(self.email)
+
+    @staticmethod
+    def verify_reset_token(token, expires_sec=1800):
+        try:
+            email = s.loads(token, max_age=expires_sec)
+        except:
+            return None
+        return User.query.filter_by(email=email).first()
 
     @property
     def is_admin(self):
         return self.role in ADMIN_ROLES
+    
+    def __repr__(self):
+        return f"<User {self.name} ({self.role})> password: {self.password}"
 
 
 class Treatment(db.Model):
@@ -98,13 +118,15 @@ visit_treatments = db.Table('visit_treatments',
 class Customer(db.Model):
     """
     WHO — Identity record. One per person.
-    Phone is the unique identifier.
+    Phone + Name is the unique identifier to handle cases where same phone comes with different name.
     """
     id         = db.Column(db.Integer, primary_key=True)
     name       = db.Column(db.String(100), nullable=False)
-    phone      = db.Column(db.String(20), unique=True, nullable=False)   # UNIQUE identity
+    phone = db.Column(db.String(20),nullable=False,index=True)  
     email      = db.Column(db.String(120))
     age        = db.Column(db.Integer)
+    dob        = db.Column(db.Date)
+    gender     = db.Column(db.String(10))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # All visits by this customer
@@ -125,7 +147,12 @@ class Customer(db.Model):
 
     @property
     def is_returning(self):
-        return self.total_visits > 1
+        # Check if this phone number has been used before (across all customer records with same phone)
+        # This treats all visits from the same phone as a returning customer
+        all_visits_with_phone = db.session.query(Visit).join(Customer).filter(
+            Customer.phone == self.phone
+        ).count()
+        return all_visits_with_phone > 1
 
 
 class Visit(db.Model):
@@ -177,6 +204,110 @@ def normalize_phone(raw: str) -> str:
         digits = digits[1:]
     return digits[-10:] if len(digits) >= 10 else digits
 
+@app.route('/forgot-password', methods=['GET','POST'])
+def forgot_password():
+
+    if request.method == 'POST':
+
+        email = request.form['email']
+
+        user = User.query.filter_by(email=email).first()
+
+        if user:
+
+            token = user.get_reset_token()
+
+            reset_link = url_for(
+                'reset_password',
+                token=token,
+                _external=True
+            )
+            print("RESET LINK:", reset_link)
+
+            msg = Message(
+                'Password Reset - Glow Park',
+                sender=app.config['MAIL_USERNAME'],
+                recipients=[user.email]
+            )
+
+            msg.body = f"""
+Reset your password:
+
+{reset_link}
+
+Link valid for 30 minutes.
+"""
+
+            mail.send(msg)
+
+        flash('Reset link sent to email.', 'success')
+
+        return redirect(url_for('login'))
+
+    return render_template('forgot_password.html')
+
+@app.route('/reset-password/<token>', methods=['GET','POST'])
+def reset_password(token):
+
+    user = User.verify_reset_token(token)
+
+    if not user:
+        flash('Invalid or expired token.', 'error')
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+
+        password = request.form['password']
+        confirm  = request.form['confirm']
+
+        if password != confirm:
+            flash('Passwords do not match.', 'error')
+            return redirect(request.url)
+
+        hashed = bcrypt.generate_password_hash(password).decode('utf-8')
+
+        user.password = hashed
+
+        db.session.commit()
+
+        flash('Password reset successful.', 'success')
+
+        return redirect(url_for('login'))
+
+    return render_template('reset_password.html')
+
+@app.route('/change-password', methods=['GET','POST'])
+@login_required
+def change_password():
+
+    if request.method == 'POST':
+
+        current = request.form['current_password']
+        new     = request.form['new_password']
+        confirm = request.form['confirm_password']
+
+        if not bcrypt.check_password_hash(
+                current_user.password,
+                current):
+
+            flash('Current password incorrect.', 'error')
+            return redirect(request.url)
+
+        if new != confirm:
+            flash('Passwords do not match.', 'error')
+            return redirect(request.url)
+
+        hashed = bcrypt.generate_password_hash(new).decode('utf-8')
+
+        current_user.password = hashed
+
+        db.session.commit()
+
+        flash('Password changed successfully.', 'success')
+
+        return redirect(url_for('dashboard'))
+
+    return render_template('change_password.html')
 
 def visits_for_user():
     """Staff see only their own visits. Admin sees all."""
@@ -188,15 +319,14 @@ def visits_for_user():
 def get_dashboard_stats():
     today       = date.today()
     month_start = datetime(today.year, today.month, 1)
-    base        = visits_for_user()
+    # Analytics are global (billing level)
+    base        = Visit.query
 
     today_visits = base.filter(db.func.date(Visit.visit_date) == today).all()
     month_visits = base.filter(Visit.visit_date >= month_start).all()
     all_visits   = base.all()
 
-    total_customers = Customer.query.count() if current_user.is_admin \
-                      else db.session.query(db.func.count(db.distinct(Visit.customer_id)))\
-                               .filter(Visit.staff_id == current_user.id).scalar()
+    total_customers = Customer.query.count()
 
     return {
         'today':           fmt_inr(sum(float(v.total_amount) for v in today_visits)),
@@ -416,69 +546,150 @@ def search():
 @app.route('/new-visit', methods=['GET', 'POST'])
 @login_required
 def new_visit():
-    # treatments   = Treatment.query.all()
-    treatments = Treatment.query.filter_by(is_active=True).all()
+
+    treatments = Treatment.query.filter_by(
+        is_active=True
+    ).all()
+
     prefill_id   = request.args.get('customer_id', type=int)
     prefill_cust = Customer.query.get(prefill_id) if prefill_id else None
 
     if request.method == 'POST':
-        phone          = normalize_phone(request.form['phone'])
-        name           = request.form['name'].strip()
-        email          = request.form.get('email', '').strip()
-        age            = request.form.get('age') or None
+
+        phone = normalize_phone(
+            request.form['phone']
+        )
+
+        name   = request.form['name'].strip()
+        email  = request.form.get('email', '').strip()
+        age    = request.form.get('age')
+        gender = request.form.get('gender')
+        
+        dob_str = request.form.get('dob')
+        dob = datetime.strptime(dob_str, '%Y-%m-%d').date() if dob_str else None
+
         payment_method = request.form['payment_method']
         notes          = request.form.get('notes', '')
-        treatment_ids  = request.form.getlist('treatments')
-        vd_str     = request.form.get('visit_date', '').strip()
+
+        treatment_ids = request.form.getlist(
+            'treatments'
+        )
+
+        vd_str = request.form.get('visit_date')
+
         if vd_str:
-            # Form sends IST time as 'YYYY-MM-DDTHH:MM' — store as-is (treat all datetimes as IST)
-            visit_date = datetime.strptime(vd_str, '%Y-%m-%dT%H:%M')
+            visit_date = datetime.strptime(
+                vd_str,
+                '%Y-%m-%dT%H:%M'
+            )
         else:
-            # Fallback: current IST time (UTC + 5h30m)
-            from datetime import timezone, timedelta
-            IST = timezone(timedelta(hours=5, minutes=30))
-            visit_date = datetime.now(IST).replace(tzinfo=None)
+            IST = timedelta(hours=5, minutes=30)
+            visit_date = datetime.utcnow() + IST
 
-        # ── Phone validation ──
-        if len(phone) != 10 or not phone.isdigit():
-            return render_template('new_visit.html',
-                error=f"Invalid phone number '{request.form['phone']}' — must be 10 digits.",
-                treatments=Treatment.query.all(), prefill=None)
+        # ───────── PHONE VALIDATION ─────────
 
-        # ── Step 1: Get or create Customer identity ──
-        customer = Customer.query.filter_by(phone=phone).first()
+        if len(phone) != 10:
+
+            flash("Invalid phone number", "error")
+
+            return render_template(
+                'new_visit.html',
+                treatments=treatments
+            )
+
+        # ───────── CUSTOMER ─────────
+        # First, try to find exact match (same phone AND same name)
+        customer = Customer.query.filter_by(phone=phone, name=name).first()
+
+        # If not found, check if there's a customer with same phone but different name
+        same_phone_diff_name = None
         if not customer:
-            # New customer — create identity record
-            customer = Customer(name=name, phone=phone, email=email, age=age)
-            db.session.add(customer)
-            db.session.flush()   # get customer.id before visit insert
-        else:
-            # Returning customer — update profile if staff changed anything
-            if name:  customer.name  = name
-            if email: customer.email = email
-            if age:   customer.age   = age
+            same_phone_diff_name = Customer.query.filter_by(phone=phone).first()
 
-        # ── Step 2: Always create new Visit record ──
-        selected   = Treatment.query.filter(Treatment.id.in_(treatment_ids)).all()
-        total      = sum(float(t.price) for t in selected)
+        if not customer:
+            if same_phone_diff_name:
+                # Same phone but different name - create a NEW customer record
+                # This handles cases where different people use the same phone
+                flash(
+                    f"⚠️ Phone {phone} was previously used by '{same_phone_diff_name.name}'. Creating new customer record for '{name}'.",
+                    'warning'
+                )
+                customer = Customer(
+                    name=name,
+                    phone=phone,
+                    email=email,
+                    age=age,
+                    dob=dob,
+                    gender=gender
+                )
+            else:
+                # Completely new customer
+                customer = Customer(
+                    name=name,
+                    phone=phone,
+                    email=email,
+                    age=age,
+                    dob=dob,
+                    gender=gender
+                )
+            db.session.add(customer)
+            db.session.flush()
+        else:
+            # Exact match found (same phone AND same name)
+            # Just update missing fields
+            if not customer.email and email:
+                customer.email = email
+            if not customer.age and age:
+                customer.age = age
+            if not customer.dob and dob:
+                customer.dob = dob
+            if not customer.gender and gender:
+                customer.gender = gender
+
+        # ───────── TREATMENTS ─────────
+
+        selected = Treatment.query.filter(
+            Treatment.id.in_(treatment_ids)
+        ).all()
+
+        total = sum(
+            float(t.price)
+            for t in selected
+        )
+
+        # ───────── CREATE VISIT ─────────
 
         visit = Visit(
-            customer_id    = customer.id,
-            staff_id       = current_user.id,
-            visit_date     = visit_date,
-            total_amount   = total,
-            payment_method = payment_method,
-            notes          = notes,
-            treatments     = selected,
+
+            customer_id=customer.id,
+            staff_id=current_user.id,
+
+            visit_date=visit_date,
+
+            total_amount=total,
+
+            payment_method=payment_method,
+
+            notes=notes,
+
+            treatments=selected
         )
+
         db.session.add(visit)
         db.session.commit()
 
-        return redirect(url_for('generate_bill', visit_id=visit.id))
+        return redirect(
+            url_for(
+                'generate_bill',
+                visit_id=visit.id
+            )
+        )
 
-    return render_template('new_visit.html',
-                           treatments=treatments,
-                           prefill=prefill_cust)
+    return render_template(
+        'new_visit.html',
+        treatments=treatments,
+        prefill=prefill_cust
+    )
 
 
 # ═══════════════════════════════════════════════════════════
@@ -530,6 +741,14 @@ def send_bill(visit_id):
 @login_required
 def customer_profile(customer_id):
     c = Customer.query.get_or_404(customer_id)
+    
+    # Industry RBAC: Staff only see profiles of customers they have handled
+    if not current_user.is_admin:
+        handled_visits = Visit.query.filter_by(customer_id=c.id, staff_id=current_user.id).count()
+        if handled_visits == 0:
+            flash("Access denied. You have not handled this customer.", "error")
+            return redirect(url_for('dashboard'))
+
     visits = c.visits.all()
     return render_template('customer_profile.html', customer=c, visits=visits)
 
@@ -546,7 +765,189 @@ def edit_customer(customer_id):
     flash('Customer profile updated.', 'success')
     return redirect(url_for('customer_profile', customer_id=customer_id))
 
+# ═══════════════════════════════════════════════════════════
+#  BILLING Dump as CSV 
+# ═══════════════════════════════════════════════════════════
+@app.route('/import-billing-csv', methods=['POST'])
+@login_required
+@admin_required
+def import_billing_csv():
 
+    file = request.files.get('file')
+
+    if not file:
+        flash("No file uploaded", "error")
+        return redirect(url_for('billing_view'))
+
+    stream = io.StringIO(
+        file.stream.read().decode("UTF8"),
+        newline=None
+    )
+
+    reader = csv.DictReader(stream)
+
+    created_visits = 0
+
+    for row in reader:
+
+        phone  = normalize_phone(row.get('Phone'))
+        name   = row.get('Customer Name')
+        age    = row.get('Age')
+        gender = row.get('Gender')
+        email  = row.get('Email')
+
+        payment_method = row.get('Payment Method')
+
+        treatments_raw = row.get('Treatments')
+
+        if not phone or not treatments_raw:
+            continue
+
+        # ───────── CUSTOMER ─────────
+
+        customer = Customer.query.filter_by(phone=phone).first()
+
+        if not customer:
+            customer = Customer(
+                name=name,
+                phone=phone,
+                age=age,
+                gender=gender,
+                email=email
+            )
+            db.session.add(customer)
+            db.session.flush()
+        else:
+            existing_name = customer.name
+            if not existing_name and name:
+                customer.name = name
+            if not customer.email and email:
+                customer.email = email
+            if not customer.age and age:
+                customer.age = age
+            if not customer.gender and gender:
+                customer.gender = gender
+            if name and existing_name and name != existing_name:
+                flash(
+                    'Existing customer found for this phone. Keeping the original customer record.',
+                    'info'
+                )
+            
+
+        # ───────── MULTIPLE TREATMENTS ─────────
+
+        treatment_names = [
+            t.strip()
+            for t in treatments_raw.split('|')
+            if t.strip()
+        ]
+
+        treatments = []
+
+        total_amount = 0
+
+        for t_name in treatment_names:
+
+            treatment = Treatment.query.filter(
+                db.func.lower(Treatment.name)
+                == t_name.lower()
+            ).first()
+
+            # Create if missing
+
+            if not treatment:
+
+                treatment = Treatment(
+                    name=t_name,
+                    price=0
+                )
+
+                db.session.add(treatment)
+                db.session.flush()
+
+            treatments.append(treatment)
+
+            total_amount += float(treatment.price)
+
+        # ───────── CREATE VISIT ─────────
+
+        visit = Visit(
+            customer_id=customer.id,
+            staff_id=current_user.id,
+            total_amount=total_amount,
+            payment_method=payment_method,
+            treatments=treatments
+        )
+
+        db.session.add(visit)
+
+        created_visits += 1
+
+    db.session.commit()
+
+    flash(
+        f"{created_visits} visits imported successfully!",
+        "success"
+    )
+
+    return redirect(url_for('billing_view'))
+
+
+
+@app.route('/import-treatments-csv', methods=['POST'])
+@login_required
+@admin_required
+def import_treatments_csv():
+
+    file = request.files.get('file')
+
+    if not file:
+        flash("No file selected", "error")
+        return redirect(url_for('dashboard'))
+
+    stream = TextIOWrapper(file.stream, encoding='utf-8')
+    reader = csv.DictReader(stream)
+
+    added = 0
+    updated = 0
+
+    for row in reader:
+
+        name = row.get("Treatment Name")
+        price = row.get("Price")
+
+        if not name or not price:
+            continue
+
+        name = name.strip().title()
+        price = float(price)
+
+        # Check if treatment exists
+        treatment = Treatment.query.filter_by(name=name).first()
+
+        if treatment:
+            # Update price only
+            treatment.price = price
+            updated += 1
+
+        else:
+            # Add new treatment
+            new_treatment = Treatment(
+                name=name,
+                price=price
+            )
+
+            db.session.add(new_treatment)
+            added += 1
+
+    db.session.commit()
+
+    flash(
+        f"{added} added, {updated} updated successfully!",
+        "success"
+    )
+
+    return redirect(url_for('dashboard'))
 # ═══════════════════════════════════════════════════════════
 #  BILLING (all transactions)
 # ═══════════════════════════════════════════════════════════
@@ -561,6 +962,97 @@ def billing_view():
 
     return render_template('billing.html', visits=visits)
 
+
+@app.route('/master-customers')
+@login_required
+def master_customers():
+    """Master customer table - unique by phone number (Brand ID)"""
+    page = request.args.get('page', 1, type=int)
+    
+    # Get all customers, deduplicate by phone, keep latest record per phone
+    all_customers = Customer.query.all()
+    seen_phones = {}
+    unique_customers = []
+    for c in sorted(all_customers, key=lambda x: x.created_at, reverse=True):
+        if c.phone not in seen_phones:
+            seen_phones[c.phone] = True
+            unique_customers.append(c)
+    
+    # Simple pagination
+    per_page = 10
+    total = len(unique_customers)
+    pages = (total + per_page - 1) // per_page
+    start = (page - 1) * per_page
+    end = start + per_page
+    paginated = unique_customers[start:end]
+    
+    class Pagination:
+        pass
+    
+    result = Pagination()
+    result.items = paginated
+    result.total = total
+    result.pages = pages
+    result.page = page
+    
+    return render_template('master_customers.html', customers=result)
+
+
+@app.route('/export-billing-csv')
+@login_required
+def export_billing_csv():
+
+    visits = visits_for_user()\
+        .order_by(Visit.visit_date.desc())\
+        .all()
+
+    output = io.StringIO()
+
+    writer = csv.writer(output)
+
+    # Header
+    writer.writerow([
+        "Bill ID",
+        "Customer Name",
+        "Phone",
+        "Age",
+        "Gender",
+        "Payment Method",
+        "Treatments",
+        "Total Amount",
+        "Staff",
+        "Visit Date"
+    ])
+
+    # Rows
+    for v in visits:
+
+        treatment_names = "|".join(
+    [t.name for t in v.treatments]
+)
+
+        writer.writerow([
+            v.id,
+            v.customer.name,
+            v.customer.phone,
+            v.customer.age,
+            v.customer.gender,
+            v.payment_method,
+            treatment_names,
+            float(v.total_amount),
+            v.staff.name if v.staff else "",
+            v.visit_date.strftime('%Y-%m-%d %H:%M')
+        ])
+
+    response = make_response(output.getvalue())
+
+    response.headers["Content-Disposition"] = \
+        "attachment; filename=billing_export.csv"
+
+    response.headers["Content-Type"] = \
+        "text/csv"
+
+    return response
 
 # ═══════════════════════════════════════════════════════════
 #  ANALYTICS
@@ -579,9 +1071,72 @@ def analytics_view():
 @login_required
 @admin_required
 def campaigns_view():
-    visits          = visits_for_user().order_by(Visit.visit_date.desc()).all()
+    # Group by customer and get aggregate data
+    # We'll fetch all customers and their visits to calculate loyalty and spend
+    customers = Customer.query.all()
+    customer_data = []
+    
+    for c in customers:
+        all_visits = c.visits.all()
+        if not all_visits:
+            continue
+            
+        latest_visit = all_visits[0] # visits are ordered by date desc
+        
+        # Aggregate treatments across all visits for filtering
+        treatment_ids = set()
+        treatment_names = []
+        for v in all_visits:
+            for t in v.treatments:
+                treatment_ids.add(str(t.id))
+                treatment_names.append(t.name)
+        
+        customer_data.append({
+            'customer': c,
+            'total_spent': sum(float(v.total_amount) for v in all_visits),
+            'total_visits': len(all_visits),
+            'latest_visit': latest_visit,
+            'days_since_last_visit': (date.today() - latest_visit.visit_date.date()).days,
+            'all_treatment_ids': ",".join(treatment_ids),
+            'all_treatment_names': ", ".join(list(set(treatment_names)))
+        })
+    
+    # Calculate dynamic filter ranges from actual data
+    filter_meta = {
+        'min_spend': 0,
+        'max_spend': 0,
+        'avg_spend': 0,
+        'min_visits': 0,
+        'max_visits': 0,
+        'avg_visits': 0,
+        'max_inactive_days': 0,
+        'available_months': set(),
+    }
+    
+    if customer_data:
+        spends = [c['total_spent'] for c in customer_data]
+        visits = [c['total_visits'] for c in customer_data]
+        inactive = [c['days_since_last_visit'] for c in customer_data]
+        
+        filter_meta['min_spend'] = int(min(spends))
+        filter_meta['max_spend'] = int(max(spends))
+        filter_meta['avg_spend'] = int(sum(spends) / len(spends))
+        
+        filter_meta['min_visits'] = int(min(visits))
+        filter_meta['max_visits'] = int(max(visits))
+        filter_meta['avg_visits'] = int(sum(visits) / len(visits))
+        
+        filter_meta['max_inactive_days'] = int(max(inactive)) if inactive else 0
+        
+        # Collect available birthday months
+        for c in customer_data:
+            if c['customer'].dob:
+                filter_meta['available_months'].add(c['customer'].dob.month)
+        
+        filter_meta['available_months'] = sorted(list(filter_meta['available_months']))
+        
     treatment_stats = get_treatment_stats()
-    return render_template('campaigns.html', visits=visits, treatment_stats=treatment_stats)
+    return render_template('campaigns.html', customers=customer_data, treatment_stats=treatment_stats, filter_meta=filter_meta)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -611,6 +1166,8 @@ def manage_treatments():
     treatments = Treatment.query.order_by(Treatment.id.desc()).all()
     return render_template('treatments.html', treatments=treatments)
 
+from sqlalchemy import func
+
 @app.route('/treatments/add', methods=['POST'])
 @login_required
 @admin_required
@@ -619,14 +1176,30 @@ def add_treatment():
     price = float(request.form['price'])
 
     if not name:
-        flash('Name required', 'error')
+        flash('Treatment name required!', 'error')
         return redirect(url_for('manage_treatments'))
 
-    db.session.add(Treatment(name=name, price=price))
+    # ✅ Check duplicate (case-insensitive)
+    existing = Treatment.query.filter(
+        func.lower(Treatment.name) == name.lower()
+    ).first()
+
+    if existing:
+        flash(f'Treatment "{name}" already exists!', 'warning')
+        return redirect(url_for('manage_treatments'))
+
+    # ✅ Add new treatment
+    new_treatment = Treatment(
+        name=name,
+        price=price
+    )
+
+    db.session.add(new_treatment)
     db.session.commit()
 
-    flash('Treatment added!', 'success')
-    return redirect(url_for('treatments'))
+    flash('Treatment added successfully!', 'success')
+
+    return redirect(url_for('manage_treatments'))
 
 @app.route('/treatments/<int:id>/edit', methods=['POST'])
 @login_required
@@ -719,6 +1292,7 @@ def generate_pdf_buffer(v):
         ["Phone",          c.phone],
         ["Email",          c.email or "—"],
         ["Age",            str(c.age) if c.age else "—"],
+        ["Gender", c.gender],
         ["Total Visits",   f"#{visit_num} (lifetime)"],
         ["Treatments",     treatment_names],
         ["Staff Handled",  v.staff.name if v.staff else "—"],
@@ -753,7 +1327,6 @@ def generate_pdf_buffer(v):
     doc.build(story)
     buffer.seek(0)
     return buffer
-
 
 if __name__ == '__main__':
     with app.app_context():

@@ -1,52 +1,363 @@
 {% extends 'base.html' %}
 {% block title %}Dashboard – Glow Park{% endblock %}
+
 {% block page_title %}Dashboard{% endblock %}
 
 {% block topbar_actions %}
+<div class="top-actions">
   <a href="{{ url_for('new_visit') }}" class="btn btn-pink">✦ New Visit</a>
+  
+  <a href="{{ url_for('master_customers') }}" class="btn btn-ghost">📋 Master Table</a>
 
   {% if current_user.is_admin %}
-    <a href="{{ url_for('manage_treatments') }}" class="btn btn-outline">
-      ⚙ Treatments
-    </a>
+  <a href="{{ url_for('manage_treatments') }}" class="btn btn-outline">⚙ Treatments</a>
+  
+  <button onclick="toggleModal()" class="btn btn-secondary">📂 Bulk Import</button>
+
+  <div id="importModal" class="modal-overlay" style="display:none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Import Treatments</h3>
+        <span class="close-modal" onclick="toggleModal()">&times;</span>
+      </div>
+      <div class="modal-body">
+        <p>Upload a CSV file to add or update treatment prices.</p>
+        
+        <div class="csv-sample">
+          <strong>Required CSV Format:</strong>
+          <code>Treatment Name, Price</code>
+          <pre>HydraFacial, 2500&#10;Full Body Wax, 1200</pre>
+        </div>
+
+        <form action="{{ url_for('import_treatments_csv') }}" method="POST" enctype="multipart/form-data">
+          <div class="file-input-wrapper">
+            <input type="file" name="file" accept=".csv" required id="csvFile"/>
+          </div>
+          <button type="submit" class="btn btn-pink" style="width:100%; margin-top:15px;">🚀 Start Import</button>
+        </form>
+      </div>
+    </div>
+  </div>
   {% endif %}
+</div>
 {% endblock %}
 
 {% block content %}
+
+<style>
+/* ===== GLOBAL DASHBOARD STYLE ===== */
+body {
+  font-family: "Inter", sans-serif;
+}
+/* MODAL STYLES */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000;
+}
+.modal-content {
+  background: white;
+  padding: 24px;
+  border-radius: 20px;
+  width: 90%; max-width: 400px;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+}
+.modal-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 15px;
+}
+.close-modal { cursor: pointer; font-size: 24px; color: #888; }
+
+/* CSV SAMPLE BOX */
+.csv-sample {
+  background: #f8f9fa;
+  border: 1px dashed #cbd5e1;
+  padding: 12px;
+  border-radius: 10px;
+  margin: 15px 0;
+  font-size: 12px;
+}
+.csv-sample code { color: #db2777; font-weight: bold; }
+.csv-sample pre { margin-top: 5px; color: #64748b; font-family: monospace; }
+
+/* REFINED INPUTS */
+.file-input-wrapper input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+}
+
+/* TABLE UPDATES */
+.table-wrap table th {
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #64748b;
+  font-weight: 600;
+  font-size: 11px;
+}
+
+/* TOP ACTIONS */
+.top-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.upload-form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.upload-form input {
+  padding: 6px;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  background: #fff;
+}
+
+/* ===== STATS GRID ===== */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 18px;
+  margin-top: 20px;
+}
+
+.stat-card {
+  background: var(--white);
+  border: 1px solid var(--gray-line);
+  border-radius: var(--radius);
+  padding: 24px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card:hover {
+  transform: translateY(-5px);
+  box-shadow: var(--shadow-lg);
+}
+
+.stat-card::after {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 4px;
+}
+
+.stat-icon {
+  font-size: 20px;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  margin-bottom: 10px;
+}
+
+.stat-label {
+  font-size: 13px;
+  color: #888;
+}
+
+.stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  margin-top: 5px;
+}
+
+.stat-sub {
+  font-size: 12px;
+  color: #aaa;
+  margin-top: 4px;
+}
+
+/* COLOR ACCENTS */
+.c-pink::after { background: var(--pink); }
+.c-green::after { background: var(--green); }
+.c-amber::after { background: var(--amber); }
+.c-red::after { background: var(--red); }
+
+.c-pink .stat-icon { background: var(--pink-light); color: var(--pink); }
+.c-green .stat-icon { background: #ecfdf5; color: var(--green); }
+.c-amber .stat-icon { background: #fffbeb; color: var(--amber); }
+.c-red .stat-icon { background: #fef2f2; color: var(--red); }
+
+/* ===== SECTION CARD ===== */
+.section-card {
+  margin-top: 28px;
+  background: #fff;
+  border-radius: 18px;
+  border: 1px solid #f0f0f0;
+  overflow: hidden;
+  box-shadow: 0 8px 22px rgba(0,0,0,0.05);
+}
+
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #f3f3f3;
+  background: #fafafa;
+}
+
+.section-title {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+/* ===== TABLE ===== */
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+thead {
+  background: #fafafa;
+}
+
+th, td {
+  padding: 12px 14px;
+  text-align: left;
+  border-bottom: 1px solid #f2f2f2;
+}
+
+tbody tr:hover {
+  background: #fff7fb;
+  transition: 0.2s;
+}
+
+/* BADGES */
+.badge {
+  padding: 3px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.b-cash { background: #e0f2fe; color: #0369a1; }
+.b-card { background: #fef3c7; color: #92400e; }
+.b-upi { background: #dcfce7; color: #166534; }
+
+/* ICON BUTTONS */
+.icon-btn {
+  border: none;
+  background: #f5f5f5;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  text-decoration: none;
+  font-size: 14px;
+  transition: 0.2s;
+}
+
+.icon-btn:hover {
+  background: #eaeaea;
+}
+
+.icon-btn.wa {
+  background: #dcfce7;
+}
+
+/* BUTTONS */
+.btn {
+  padding: 8px 14px;
+  border-radius: 10px;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-block;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-pink {
+  background: linear-gradient(135deg, #ec4899, #db2777);
+  color: white;
+}
+
+.btn-outline {
+  border: 1px solid #ddd;
+  background: white;
+}
+
+.btn-secondary {
+  background: #f3f4f6;
+}
+
+/* PAGINATION */
+.pagination {
+  display: flex;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: #fafafa;
+  border-top: 1px solid #eee;
+}
+
+/* RESPONSIVE */
+@media (max-width: 768px) {
+  th, td {
+    padding: 10px;
+    font-size: 12px;
+  }
+
+  .stat-value {
+    font-size: 18px;
+  }
+}
+</style>
+
+<!-- ===== STATS ===== -->
 <div class="stat-grid">
   <div class="stat-card c-pink">
-    <div class="stat-icon si-pink">💰</div>
+    <div class="stat-icon">💰</div>
     <div class="stat-label">Today's Revenue</div>
     <div class="stat-value">₹{{ stats.today }}</div>
     <div class="stat-sub">{{ stats.today_count }} visits today</div>
   </div>
+
   <div class="stat-card c-green">
-    <div class="stat-icon si-green">📅</div>
+    <div class="stat-icon">📅</div>
     <div class="stat-label">This Month</div>
     <div class="stat-value">₹{{ stats.month }}</div>
     <div class="stat-sub">{{ stats.month_count }} visits</div>
   </div>
+
   <div class="stat-card c-amber">
-    <div class="stat-icon si-amber">👥</div>
+    <div class="stat-icon">👥</div>
     <div class="stat-label">Total Customers</div>
     <div class="stat-value">{{ stats.total_customers }}</div>
     <div class="stat-sub">Unique profiles</div>
   </div>
+
   <div class="stat-card c-red">
-    <div class="stat-icon si-red">🏆</div>
+    <div class="stat-icon">🏆</div>
     <div class="stat-label">Total Revenue</div>
     <div class="stat-value">₹{{ stats.total_revenue }}</div>
     <div class="stat-sub">All time</div>
   </div>
 </div>
 
+<!-- ===== VISITS TABLE ===== -->
 <div class="section-card">
   <div class="section-head">
     <div class="section-title">Recent Visits</div>
-    <div class="section-actions">
-      <a href="{{ url_for('billing_view') }}" class="btn btn-outline">View All →</a>
-    </div>
+    <a href="{{ url_for('billing_view') }}" class="btn btn-outline">View All →</a>
   </div>
+
   <div class="table-wrap">
     <table>
       <thead>
@@ -63,58 +374,65 @@
           <th>Actions</th>
         </tr>
       </thead>
+
       <tbody>
         {% for v in visits.items %}
         <tr>
-          <td><span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--pink)">#GP{{ '%04d'|format(v.id) }}</span></td>
+          <td>#GP{{ '%04d'|format(v.id) }}</td>
+
           <td>
-            <a href="{{ url_for('customer_profile', customer_id=v.customer.id) }}"
-               style="font-weight:700;color:var(--gray-dark);text-decoration:none">
-              {{ v.customer.name }}
-            </a>
+            <b>{{ (v.customer.name).capitalize() }}</b>
             {% if v.customer.is_returning %}
-              <span style="display:inline-block;background:#D1FAE5;color:#065F46;border-radius:5px;padding:1px 6px;font-size:10px;font-weight:600;margin-left:4px;font-family:'DM Mono',monospace">↩ Return</span>
+              <span class="badge" style="background:#dcfce7;color:#166534;">↩ Return</span>
             {% else %}
-              <span style="display:inline-block;background:#DBEAFE;color:#1E40AF;border-radius:5px;padding:1px 6px;font-size:10px;font-weight:600;margin-left:4px;font-family:'DM Mono',monospace">★ New</span>
+              <span class="badge" style="background:#dbeafe;color:#1e40af;">★ New</span>
             {% endif %}
           </td>
-          <td style="font-family:'DM Mono',monospace;font-size:12px">{{ v.customer.phone }}</td>
-          <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--gray-light)">#{{ v.customer.total_visits }}</td>
+
+          <td>{{ v.customer.phone }}</td>
+          <td>#{{ v.customer.total_visits }}</td>
+
           <td>
             {% for t in v.treatments %}
-              <span style="display:inline-block;background:var(--pink-light);color:var(--pink-deep);border-radius:5px;padding:2px 7px;font-size:11px;margin:1px">{{ t.name }}</span>
+              <span class="badge" style="background:#ffe4f1;color:#be185d;">{{ t.name }}</span>
             {% endfor %}
           </td>
-          <td style="font-size:12px">{{ v.staff.name if v.staff else '—' }}</td>
-          <td><span class="badge b-{{ (v.payment_method or 'cash').lower() }}">{{ (v.payment_method or 'CASH').upper() }}</span></td>
-          <td><b style="color:var(--pink-deep)">₹{{ v.total_amount }}</b></td>
-          <td style="font-size:12px;color:var(--gray-light)">{{ v.visit_date.strftime('%d %b, %I:%M %p') }}</td>
+
+          <td>{{ v.staff.name if v.staff else '—' }}</td>
+
+          <td><span class="badge b-{{ (v.payment_method or 'cash').lower() }}">{{ (v.payment_method or 'CASH') }}</span></td>
+
+          <td><b>₹{{ v.total_amount }}</b></td>
+
+          <td>{{ v.visit_date.strftime('%d %b %I:%M %p') }}</td>
+
           <td>
-            <div style="display:flex;gap:5px">
-              <a href="{{ url_for('generate_bill', visit_id=v.id) }}" class="icon-btn" title="View Bill">👁</a>
-              <a href="{{ url_for('download_bill', visit_id=v.id) }}" class="icon-btn" title="Download PDF">📄</a>
-              <button class="icon-btn wa" title="WhatsApp"
-                onclick="sendWhatsApp('{{ v.customer.phone }}','{{ v.customer.name }}',{{ v.id }},'{{ v.total_amount }}')">💬</button>
-            </div>
+            <a class="icon-btn" href="{{ url_for('generate_bill', visit_id=v.id) }}">👁</a>
+            <a class="icon-btn" href="{{ url_for('download_bill', visit_id=v.id) }}">📄</a>
+            <button class="icon-btn wa">💬</button>
           </td>
         </tr>
-        {% else %}
-        <tr><td colspan="10" style="text-align:center;padding:40px;color:var(--gray-light)">
-          No visits yet. <a href="{{ url_for('new_visit') }}" style="color:var(--pink)">Add one →</a>
-        </td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
-
-  {% if visits.pages > 1 %}
-  <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-top:1px solid var(--pink-border);background:var(--pink-pale)">
-    <span style="font-size:12px;color:var(--gray-light)">Page {{ visits.page }} of {{ visits.pages }} · {{ visits.total }} visits</span>
-    <div style="display:flex;gap:6px">
-      {% if visits.has_prev %}<a href="{{ url_for('dashboard', page=visits.prev_num) }}" class="btn btn-ghost" style="padding:7px 14px;font-size:12px">← Prev</a>{% endif %}
-      {% if visits.has_next %}<a href="{{ url_for('dashboard', page=visits.next_num) }}" class="btn btn-pink" style="padding:7px 14px;font-size:12px">Next →</a>{% endif %}
-    </div>
-  </div>
-  {% endif %}
 </div>
+<script>
+  function toggleModal() {
+  const modal = document.getElementById('importModal');
+  if (modal.style.display === 'none' || modal.style.display === '') {
+    modal.style.display = 'flex';
+  } else {
+    modal.style.display = 'none';
+  }
+}
+
+// Close modal if user clicks outside of the content box
+window.onclick = function(event) {
+  const modal = document.getElementById('importModal');
+  if (event.target == modal) {
+    toggleModal();
+  }
+}
+</script>
 {% endblock %}

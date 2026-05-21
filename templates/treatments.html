@@ -1,70 +1,229 @@
 {% extends 'base.html' %}
 {% block title %}Manage Treatments{% endblock %}
 
-{% block page_title %}Manage Treatments{% endblock %}
+{% block page_title %}Service Catalog Management{% endblock %}
 
 {% block content %}
+<style>
+    :root {
+        --primary-pink: #ec4899;
+        --border-color: #e2e8f0;
+        --text-main: #1e293b;
+        --text-muted: #64748b;
+        --bg-success: #dcfce7;
+        --text-success: #166534;
+        --bg-error: #fee2e2;
+        --text-error: #991b1b;
+    }
 
-<div class="section-card">
+    /* Flash Messages */
+    .alert {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem 1.25rem;
+        border-radius: 10px;
+        margin-bottom: 1.5rem;
+        border: 1px solid transparent;
+        animation: slideIn 0.3s ease-out;
+    }
+    .alert-success { background: var(--bg-success); color: var(--text-success); border-color: #bbf7d0; }
+    .alert-warning, .alert-error { background: var(--bg-error); color: var(--text-error); border-color: #fecaca; }
+    
+    .close-flash {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        cursor: pointer;
+        color: inherit;
+        opacity: 0.6;
+    }
+    .close-flash:hover { opacity: 1; }
 
-  <!-- ADD FORM -->
-  <div style="margin-bottom:20px;">
-    <form method="POST" action="{{ url_for('add_treatment') }}" style="display:flex;gap:10px;">
-      <input type="text" name="name" placeholder="Treatment name" required class="input">
-      <input type="number" name="price" placeholder="Price" required class="input">
-      <button class="btn btn-pink">+ Add</button>
-    </form>
-  </div>
+    /* Layout Components */
+    .controls-grid {
+        display: grid;
+        grid-template-columns: 1fr 350px;
+        gap: 20px;
+        margin-bottom: 2rem;
+    }
 
-  <!-- TABLE -->
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Price</th>
-          <th>Status</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
+    .management-card {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
 
-      <tbody>
-        {% for t in treatments %}
-        <tr>
-          <td>{{ t.name }}</td>
-          <td>₹{{ t.price }}</td>
+    .input-subtle {
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 10px 12px;
+        font-size: 0.95rem;
+        transition: all 0.2s;
+        width: 100%;
+    }
 
-          <td>
-            {% if t.is_active %}
-              <span class="badge b-green">Active</span>
-            {% else %}
-              <span class="badge b-red">Inactive</span>
-            {% endif %}
-          </td>
+    .input-subtle:focus {
+        outline: none;
+        border-color: var(--primary-pink);
+        box-shadow: 0 0 0 3px rgba(236, 72, 153, 0.1);
+    }
 
-          <td style="display:flex;gap:5px;">
+    /* Table Styles */
+    .treatment-table-card {
+        background: white;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    }
 
-            <!-- EDIT -->
-            <form method="POST" action="{{ url_for('edit_treatment', id=t.id) }}">
-              <input type="text" name="name" value="{{ t.name }}" required style="width:100px;">
-              <input type="number" name="price" value="{{ t.price }}" required style="width:80px;">
-              <button class="btn btn-outline">Update</button>
-            </form>
+    .table { width: 100%; border-collapse: collapse; }
+    .table th {
+        background: #f8fafc;
+        color: var(--text-muted);
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        padding: 1rem 1.5rem;
+        text-align: left;
+    }
+    .table td { padding: 1rem 1.5rem; border-top: 1px solid #f1f5f9; vertical-align: middle; }
 
-            <!-- TOGGLE -->
-            <form method="POST" action="{{ url_for('toggle_treatment', id=t.id) }}">
-              <button class="btn btn-ghost">
-                {% if t.is_active %}Disable{% else %}Enable{% endif %}
-              </button>
-            </form>
+    .badge {
+        padding: 4px 12px;
+        border-radius: 99px;
+        font-size: 0.7rem;
+        font-weight: 700;
+    }
+    .badge-active { background: #dcfce7; color: #15803d; }
+    .badge-inactive { background: #f1f5f9; color: #64748b; }
 
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+    .duplicate-error {
+        color: var(--text-error);
+        font-size: 0.8rem;
+        margin-top: 5px;
+        display: none;
+    }
 
+    .hidden-row { display: none !important; }
+
+    @keyframes slideIn {
+        from { transform: translateY(-10px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+    }
+</style>
+
+
+
+<div class="controls-grid">
+    <div class="management-card">
+        <h3 style="margin:0 0 15px 0; font-size:1.1rem;">Add New Treatment</h3>
+        <form id="addForm" method="POST" action="{{ url_for('add_treatment') }}" style="display:flex; gap:12px; align-items: flex-start;">
+            <div style="flex-grow: 1;">
+                <input type="text" id="newName" name="name" placeholder="Treatment Name" required class="input-subtle">
+                <div id="dupWarn" class="duplicate-error">⚠️ Treatment already exists</div>
+            </div>
+            <div style="width: 140px;">
+                <input type="number" name="price" placeholder="Price" step="0.01" required class="input-subtle">
+            </div>
+            <button id="addBtn" class="btn btn-pink" style="white-space:nowrap; padding: 10px 24px;">Add Treatment</button>
+        </form>
+    </div>
+
+    <div class="management-card">
+        <h3 style="margin:0 0 15px 0; font-size:1.1rem;">Search & Filter</h3>
+        <div style="position:relative;">
+            <input type="text" id="searchBar" placeholder="Search by name..." class="input-subtle">
+            <span style="position:absolute; right:12px; top:10px; opacity:0.3;">🔍</span>
+        </div>
+    </div>
 </div>
 
+<div class="treatment-table-card">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Service Name</th>
+                <th>Price</th>
+                <th>Status</th>
+                <th>Quick Edit</th>
+                <th style="text-align:right;">Actions</th>
+            </tr>
+        </thead>
+        <tbody id="treatmentBody">
+            {% for t in treatments %}
+            <tr class="treatment-row">
+                <td class="t-name-cell" style="font-weight: 600;">{{ t.name }}</td>
+                <td style="font-family: monospace;">₹{{ "{:,.2f}".format(t.price) }}</td>
+                <td>
+                    {% if t.is_active %}
+                        <span class="badge badge-active">Active</span>
+                    {% else %}
+                        <span class="badge badge-inactive">Inactive</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <form method="POST" action="{{ url_for('edit_treatment', id=t.id) }}" style="display:flex; gap:5px;">
+                        <input type="text" name="name" value="{{ t.name }}" class="input-subtle" style="padding:5px; font-size:0.85rem; width:130px;">
+                        <input type="number" name="price" value="{{ t.price }}" class="input-subtle" style="padding:5px; font-size:0.85rem; width:80px;">
+                        <button class="btn btn-outline" style="padding:5px 10px; font-size:0.75rem;">Save</button>
+                    </form>
+                </td>
+                <td style="text-align:right;">
+                    <form method="POST" action="{{ url_for('toggle_treatment', id=t.id) }}">
+                        <button class="btn {% if t.is_active %}btn-ghost{% else %}btn-pink{% endif %}" style="font-size: 0.75rem;">
+                            {% if t.is_active %}Disable{% else %}Enable{% endif %}
+                        </button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 1. DISMISS FLASH MESSAGES
+    document.querySelectorAll('.close-flash').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const alert = btn.parentElement;
+            alert.style.opacity = '0';
+            setTimeout(() => alert.remove(), 300);
+        });
+    });
+
+    // 2. LIVE SEARCH
+    const searchBar = document.getElementById('searchBar');
+    const rows = document.querySelectorAll('.treatment-row');
+
+    searchBar.addEventListener('input', (e) => {
+        const term = e.target.value.toLowerCase();
+        rows.forEach(row => {
+            const name = row.querySelector('.t-name-cell').innerText.toLowerCase();
+            row.classList.toggle('hidden-row', !name.includes(term));
+        });
+    });
+
+    // 3. DUPLICATE CHECK
+    const nameInput = document.getElementById('newName');
+    const dupWarn = document.getElementById('dupWarn');
+    const addBtn = document.getElementById('addBtn');
+    
+    // Get list of existing names
+    const existingNames = Array.from(document.querySelectorAll('.t-name-cell'))
+                               .map(el => el.innerText.trim().toLowerCase());
+
+    nameInput.addEventListener('input', (e) => {
+        const val = e.target.value.trim().toLowerCase();
+        const isDup = existingNames.includes(val);
+        
+        dupWarn.style.display = isDup ? 'block' : 'none';
+        nameInput.style.borderColor = isDup ? 'var(--text-error)' : '';
+        addBtn.disabled = isDup;
+        addBtn.style.opacity = isDup ? '0.5' : '1';
+    });
+});
+</script>
 {% endblock %}
