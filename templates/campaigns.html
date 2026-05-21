@@ -163,6 +163,7 @@
           <th><input type="checkbox" onchange="toggleSelectAll(this)"></th>
           <th>Customer</th>
           <th>Phone</th>
+          <th>Gender</th>
           <th>Lifetime Visits</th>
           <th>Total Spent</th>
           <th>Treatments (History)</th>
@@ -174,7 +175,7 @@
         {% for item in customers %}
         <tr data-id="{{ item.customer.id }}"
             data-search="{{ item.customer.name.lower() }} {{ item.customer.phone }}"
-            data-gender="{{ item.customer.gender or '' }}"
+            data-gender="{{ (item.customer.gender or '—').capitalize() }}"
             data-spend="{{ item.total_spent }}"
             data-visits="{{ item.total_visits }}"
             data-treatments="{{ item.all_treatment_ids }}"
@@ -189,6 +190,7 @@
             {% endif %}
           </td>
           <td style="font-family:'DM Mono',monospace;font-size:12px">{{ item.customer.phone }}</td>
+          <td style="font-family:'DM Mono',monospace;font-size:12px">{{ (item.customer.gender or '—').capitalize() }}</td>
           <td style="text-align:center;"><b>{{ item.total_visits }}</b></td>
           <td><b style="color:var(--pink-deep)">₹{{ "{:,.0f}".format(item.total_spent) }}</b></td>
           <td style="max-width:300px;">
@@ -209,7 +211,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="8" style="text-align:center;padding:36px;color:var(--gray-light)">No customers found.</td></tr>
+        <tr><td colspan="9" style="text-align:center;padding:36px;color:var(--gray-light)">No customers found.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -392,21 +394,22 @@ function toggleSelectAll(cb) {
 
 // ── CSV builder ───────────────────────────────────────
 function buildCSV(onlySelected) {
-  const rows = [['Customer','Phone','Lifetime Visits','Total Spent','Treatments History','Last Visit Date']];
+  const rows = [['Customer','Phone','Gender','Lifetime Visits','Total Spent','Treatments History','Last Visit Date']];
   document.querySelectorAll('#camp-body tr[data-id]').forEach(row => {
     if (row.style.display === 'none') return;
     const cb = row.querySelector('.row-check');
     if (onlySelected && !cb.checked) return;
     const td = row.querySelectorAll('td');
     const nameEl   = td[1] ? td[1].querySelector('b') : null;
-    const spentEl  = td[4] ? td[4].querySelector('b') : null;
+    const spentEl  = td[5] ? td[5].querySelector('b') : null;
     rows.push([
       nameEl   ? nameEl.textContent.trim()   : '',
       td[2]    ? td[2].textContent.trim()    : '',
       td[3]    ? td[3].textContent.trim()    : '',
+      td[4]    ? td[4].textContent.trim()    : '',
       spentEl  ? spentEl.textContent.trim().replace('₹', '').replace(',', '') : '',
-      td[5]    ? [...td[5].querySelectorAll('span')].map(s => s.textContent.trim()).join('; ') : '',
-      td[6]    ? td[6].textContent.trim()    : '',
+      td[6]    ? [...td[6].querySelectorAll('span')].map(s => s.textContent.trim()).join('; ') : '',
+      td[7]    ? td[7].textContent.trim()    : '',
     ]);
   });
   return rows.map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\n');

@@ -39,6 +39,7 @@ block page_title %}Billing{% endblock %} {% block topbar_actions %}
           <th>Bill #</th>
           <th>Customer</th>
           <th>Phone</th>
+          <th>Gender</th>
           <th>Visit</th>
           <th>Treatments</th>
           <th>Staff</th>
@@ -105,6 +106,8 @@ block page_title %}Billing{% endblock %} {% block topbar_actions %}
             {{ v.customer.phone }}
           </td>
 
+          <td style="font-family: &quot;DM Mono&quot;; font-size: 12px">{{ (v.customer.gender or '—').capitalize()}}</td>
+
           <td
             style="
               font-family: &quot;DM Mono&quot;;
@@ -170,7 +173,7 @@ block page_title %}Billing{% endblock %} {% block topbar_actions %}
         {% else %}
         <tr>
           <td
-            colspan="10"
+            colspan="11"
             style="text-align: center; padding: 40px; color: var(--gray-light)"
           >
             No transactions found.

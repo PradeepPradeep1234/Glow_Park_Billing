@@ -121,11 +121,11 @@ visit_treatments = db.Table('visit_treatments',
 class Customer(db.Model):
     """
     WHO — Identity record. One per person.
-    Phone is the unique identifier.
+    Phone + Name is the unique identifier to handle cases where same phone comes with different name.
     """
     id         = db.Column(db.Integer, primary_key=True)
     name       = db.Column(db.String(100), nullable=False)
-    phone = db.Column(db.String(20),nullable=False,unique=True,index=True)  
+    phone = db.Column(db.String(20),nullable=False,index=True)  
     email      = db.Column(db.String(120))
     age        = db.Column(db.Integer)
     dob        = db.Column(db.Date)
@@ -150,7 +150,12 @@ class Customer(db.Model):
 
     @property
     def is_returning(self):
-        return self.total_visits > 1
+        # Check if this phone number has been used before (across all customer records with same phone)
+        # This treats all visits from the same phone as a returning customer
+        all_visits_with_phone = db.session.query(Visit).join(Customer).filter(
+            Customer.phone == self.phone
+        ).count()
+        return all_visits_with_phone > 1
 
 
 class Visit(db.Model):
@@ -596,32 +601,53 @@ def new_visit():
             )
 
         # ───────── CUSTOMER ─────────
+        # First, try to find exact match (same phone AND same name)
+        customer = Customer.query.filter_by(phone=phone, name=name).first()
 
-        customer = Customer.query.filter_by(phone=phone).first()
+        # If not found, check if there's a customer with same phone but different name
+        same_phone_diff_name = None
+        if not customer:
+            same_phone_diff_name = Customer.query.filter_by(phone=phone).first()
 
         if not customer:
-            customer = Customer(
-                name=name,
-                phone=phone,
-                email=email,
-                age=age,
-                dob=dob,
-                gender=gender
-            )
+            if same_phone_diff_name:
+                # Same phone but different name - create a NEW customer record
+                # This handles cases where different people use the same phone
+                flash(
+                    f"⚠️ Phone {phone} was previously used by '{same_phone_diff_name.name}'. Creating new customer record for '{name}'.",
+                    'warning'
+                )
+                customer = Customer(
+                    name=name,
+                    phone=phone,
+                    email=email,
+                    age=age,
+                    dob=dob,
+                    gender=gender
+                )
+            else:
+                # Completely new customer
+                customer = Customer(
+                    name=name,
+                    phone=phone,
+                    email=email,
+                    age=age,
+                    dob=dob,
+                    gender=gender
+                )
             db.session.add(customer)
             db.session.flush()
         else:
-            # Optional: update details
-            customer.name = name
-            customer.email = email
-            if age: customer.age = age
-            if dob: customer.dob = dob
-            if gender: customer.gender = gender
-
-        
-
-
-        # ❌ REMOVED customer overwrite logic
+            # Exact match found (same phone AND same name)
+            # Just update missing fields
+            if not customer.email and email:
+                customer.email = email
+            if not customer.age and age:
+                customer.age = age
+            if not customer.dob and dob:
+                customer.dob = dob
+            if not customer.gender and gender:
+                customer.gender = gender
 
         # ───────── TREATMENTS ─────────
 
@@ -771,6 +797,7 @@ def import_billing_csv():
         name   = row.get('Customer Name')
         age    = row.get('Age')
         gender = row.get('Gender')
+        email  = row.get('Email')
 
         payment_method = row.get('Payment Method')
 
@@ -788,15 +815,26 @@ def import_billing_csv():
                 name=name,
                 phone=phone,
                 age=age,
-                gender=gender
+                gender=gender,
+                email=email
             )
             db.session.add(customer)
             db.session.flush()
         else:
-            # Update details if provided
-            if name: customer.name = name
-            if age: customer.age = age
-            if gender: customer.gender = gender
+            existing_name = customer.name
+            if not existing_name and name:
+                customer.name = name
+            if not customer.email and email:
+                customer.email = email
+            if not customer.age and age:
+                customer.age = age
+            if not customer.gender and gender:
+                customer.gender = gender
+            if name and existing_name and name != existing_name:
+                flash(
+                    'Existing customer found for this phone. Keeping the original customer record.',
+                    'info'
+                )
             
 
         # ───────── MULTIPLE TREATMENTS ─────────
@@ -928,6 +966,40 @@ def billing_view():
     return render_template('billing.html', visits=visits)
 
 
+@app.route('/master-customers')
+@login_required
+def master_customers():
+    """Master customer table - unique by phone number (Brand ID)"""
+    page = request.args.get('page', 1, type=int)
+    
+    # Get all customers, deduplicate by phone, keep latest record per phone
+    all_customers = Customer.query.all()
+    seen_phones = {}
+    unique_customers = []
+    for c in sorted(all_customers, key=lambda x: x.created_at, reverse=True):
+        if c.phone not in seen_phones:
+            seen_phones[c.phone] = True
+            unique_customers.append(c)
+    
+    # Simple pagination
+    per_page = 10
+    total = len(unique_customers)
+    pages = (total + per_page - 1) // per_page
+    start = (page - 1) * per_page
+    end = start + per_page
+    paginated = unique_customers[start:end]
+    
+    class Pagination:
+        pass
+    
+    result = Pagination()
+    result.items = paginated
+    result.total = total
+    result.pages = pages
+    result.page = page
+    
+    return render_template('master_customers.html', customers=result)
+
 
 @app.route('/export-billing-csv')
 @login_required
@@ -1031,9 +1103,43 @@ def campaigns_view():
             'all_treatment_ids': ",".join(treatment_ids),
             'all_treatment_names': ", ".join(list(set(treatment_names)))
         })
+    
+    # Calculate dynamic filter ranges from actual data
+    filter_meta = {
+        'min_spend': 0,
+        'max_spend': 0,
+        'avg_spend': 0,
+        'min_visits': 0,
+        'max_visits': 0,
+        'avg_visits': 0,
+        'max_inactive_days': 0,
+        'available_months': set(),
+    }
+    
+    if customer_data:
+        spends = [c['total_spent'] for c in customer_data]
+        visits = [c['total_visits'] for c in customer_data]
+        inactive = [c['days_since_last_visit'] for c in customer_data]
+        
+        filter_meta['min_spend'] = int(min(spends))
+        filter_meta['max_spend'] = int(max(spends))
+        filter_meta['avg_spend'] = int(sum(spends) / len(spends))
+        
+        filter_meta['min_visits'] = int(min(visits))
+        filter_meta['max_visits'] = int(max(visits))
+        filter_meta['avg_visits'] = int(sum(visits) / len(visits))
+        
+        filter_meta['max_inactive_days'] = int(max(inactive)) if inactive else 0
+        
+        # Collect available birthday months
+        for c in customer_data:
+            if c['customer'].dob:
+                filter_meta['available_months'].add(c['customer'].dob.month)
+        
+        filter_meta['available_months'] = sorted(list(filter_meta['available_months']))
         
     treatment_stats = get_treatment_stats()
-    return render_template('campaigns.html', customers=customer_data, treatment_stats=treatment_stats)
+    return render_template('campaigns.html', customers=customer_data, treatment_stats=treatment_stats, filter_meta=filter_meta)
 
 
 # ═══════════════════════════════════════════════════════════

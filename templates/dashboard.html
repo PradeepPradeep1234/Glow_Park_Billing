@@ -6,6 +6,8 @@
 {% block topbar_actions %}
 <div class="top-actions">
   <a href="{{ url_for('new_visit') }}" class="btn btn-pink">✦ New Visit</a>
+  
+  <a href="{{ url_for('master_customers') }}" class="btn btn-ghost">📋 Master Table</a>
 
   {% if current_user.is_admin %}
   <a href="{{ url_for('manage_treatments') }}" class="btn btn-outline">⚙ Treatments</a>

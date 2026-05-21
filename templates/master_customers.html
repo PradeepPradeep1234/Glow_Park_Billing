@@ -1,0 +1,206 @@
+{% extends 'base.html' %}
+{% block title %}Master Customers – Glow Park{% endblock %}
+{% block page_title %}Master Customers (Brand ID Database){% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('dashboard') }}" class="btn btn-ghost">← Back to Dashboard</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="section-card">
+  <div class="section-head">
+    <div class="section-title">👥 Master Customer Table</div>
+    <span style="font-size: 12px; color: var(--gray-light);">Unique customers identified by phone (Brand ID)</span>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Phone (Brand ID)</th>
+          <th>Customer Name</th>
+          <th>Gender</th>
+          <th>Total Visits</th>
+          <th>Total Spent</th>
+          <th>Last Visit</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {% for c in customers.items %}
+        <tr>
+          <td>
+            <span style="font-family: 'DM Mono'; font-size: 12px; color: var(--pink); font-weight: 600;">
+              {{ c.phone }}
+            </span>
+          </td>
+
+          <td>
+            <a href="{{ url_for('customer_profile', customer_id=c.id) }}" 
+               style="font-weight: 600; color: var(--gray-dark); text-decoration: none;">
+              {{ c.name }}
+            </a>
+          </td>
+
+          <td>
+            <span style="font-family: 'DM Mono'; font-size: 12px;">
+              {{ (c.gender or '—').capitalize() }}
+            </span>
+          </td>
+
+          <td>
+            <span class="badge" style="background: #ffe4f1; color: #be185d;">
+              #{{ c.total_visits }}
+            </span>
+          </td>
+
+          <td>
+            <b style="color: var(--pink-deep);">₹{{ c.total_spent|int }}</b>
+          </td>
+
+          <td style="font-size: 12px; color: var(--gray-light);">
+            {% if c.last_visit %}
+              {{ c.last_visit.visit_date.strftime('%d %b, %Y') }}
+            {% else %}
+              —
+            {% endif %}
+          </td>
+
+          <td>
+            <a href="{{ url_for('customer_profile', customer_id=c.id) }}" class="icon-btn">👁</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" style="text-align: center; padding: 40px; color: var(--gray-light);">
+            No customers found.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- PAGINATION -->
+  {% if customers.pages > 1 %}
+  <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-top: 1px solid var(--pink-border); background: var(--pink-pale);">
+    <span style="font-size: 12px; color: var(--gray-light);">
+      Page {{ customers.page }} of {{ customers.pages }} · {{ customers.total }} customers
+    </span>
+    <div style="display: flex; gap: 8px;">
+      {% if customers.page > 1 %}
+        <a href="{{ url_for('master_customers', page=customers.page - 1) }}" class="btn btn-outline">← Prev</a>
+      {% endif %}
+      
+      {% if customers.page < customers.pages %}
+        <a href="{{ url_for('master_customers', page=customers.page + 1) }}" class="btn btn-outline">Next →</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<style>
+.section-card {
+  margin-top: 28px;
+  background: #fff;
+  border-radius: 18px;
+  border: 1px solid #f0f0f0;
+  overflow: hidden;
+  box-shadow: 0 8px 22px rgba(0,0,0,0.05);
+}
+
+.section-head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #f3f3f3;
+  background: #fafafa;
+}
+
+.section-title {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+thead {
+  background: #fafafa;
+}
+
+th, td {
+  padding: 12px 14px;
+  text-align: left;
+  border-bottom: 1px solid #f2f2f2;
+}
+
+tbody tr:hover {
+  background: #fff7fb;
+  transition: 0.2s;
+}
+
+.badge {
+  padding: 3px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.icon-btn {
+  border: none;
+  background: #f5f5f5;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  text-decoration: none;
+  font-size: 14px;
+  transition: 0.2s;
+}
+
+.icon-btn:hover {
+  background: #eaeaea;
+}
+
+.btn {
+  padding: 8px 14px;
+  border-radius: 10px;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-block;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-ghost {
+  background: transparent;
+  border: 1px solid #ddd;
+}
+
+.btn-outline {
+  border: 1px solid #ddd;
+  background: white;
+  color: black;
+}
+
+@media (max-width: 768px) {
+  th, td {
+    padding: 10px;
+    font-size: 12px;
+  }
+}
+</style>
+
+{% endblock %}
