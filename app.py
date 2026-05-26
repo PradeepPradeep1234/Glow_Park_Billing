@@ -25,11 +25,7 @@ from dotenv import load_dotenv
 load_dotenv()
 app = Flask(__name__)
 
-# --- FIX 1: Fix the SERVER_NAME warning ---
-# Your logs showed: "Current server name 'glow-park-billing.onrender.com' doesn't match..."
-# In Flask, SERVER_NAME must ONLY be the domain/host, WITHOUT 'https://'
-raw_server_name = os.getenv('SERVER_NAME', 'localhost:5000')
-app.config['SERVER_NAME'] = raw_server_name.replace('https://', '').replace('http://', '')
+
 
 # --- FIX 2: Correctly cast Strings to Booleans ---
 app.config['MAIL_SERVER']   = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
