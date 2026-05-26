@@ -28,10 +28,14 @@ app = Flask(__name__)
 
 
 # --- FIX 2: Correctly cast Strings to Booleans ---
-app.config['MAIL_SERVER']   = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
-app.config['MAIL_PORT']     = int(os.getenv('MAIL_PORT', 587))
-app.config['MAIL_USE_TLS']  = os.getenv('MAIL_USE_TLS', 'True') == 'True'
-app.config['MAIL_USE_SSL']  = os.getenv('MAIL_USE_SSL', 'False') == 'True'
+# Force correct variable types so Flask-Mail doesn't get string-tripped
+app.config['MAIL_SERVER']   = str(os.getenv('MAIL_SERVER', 'smtp.gmail.com')).strip()
+app.config['MAIL_PORT']     = int(os.getenv('MAIL_PORT', 465))
+
+# Explicitly evaluate strings into True/False booleans
+app.config['MAIL_USE_TLS']  = str(os.getenv('MAIL_USE_TLS')).strip().lower() in ['true', '1']
+app.config['MAIL_USE_SSL']  = str(os.getenv('MAIL_USE_SSL')).strip().lower() in ['true', '1']
+
 app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
 
