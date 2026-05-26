@@ -23,6 +23,7 @@ from dotenv import load_dotenv
 # Load variables from .env file
 load_dotenv()
 app = Flask(__name__)
+app.config['SERVER_NAME'] = os.getenv('SERVER_NAME', 'localhost:5000')
 app.config['MAIL_SERVER']   = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
 app.config['MAIL_PORT']     = int(os.getenv('MAIL_PORT', 587))
 app.config['MAIL_USE_TLS']  = os.getenv('MAIL_USE_TLS', 'True')
