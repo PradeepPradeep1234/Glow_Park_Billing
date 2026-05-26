@@ -21,15 +21,24 @@ import io
 from dotenv import load_dotenv
 
 # Load variables from .env file
+# Load variables from .env file
 load_dotenv()
 app = Flask(__name__)
-app.config['SERVER_NAME'] = os.getenv('SERVER_NAME', 'localhost:5000')
+
+# --- FIX 1: Fix the SERVER_NAME warning ---
+# Your logs showed: "Current server name 'glow-park-billing.onrender.com' doesn't match..."
+# In Flask, SERVER_NAME must ONLY be the domain/host, WITHOUT 'https://'
+raw_server_name = os.getenv('SERVER_NAME', 'localhost:5000')
+app.config['SERVER_NAME'] = raw_server_name.replace('https://', '').replace('http://', '')
+
+# --- FIX 2: Correctly cast Strings to Booleans ---
 app.config['MAIL_SERVER']   = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
 app.config['MAIL_PORT']     = int(os.getenv('MAIL_PORT', 587))
-app.config['MAIL_USE_TLS']  = os.getenv('MAIL_USE_TLS', 'True')
-app.config['MAIL_USE_SSL']  = os.getenv('MAIL_USE_SSL', 'False')
+app.config['MAIL_USE_TLS']  = os.getenv('MAIL_USE_TLS', 'True') == 'True'
+app.config['MAIL_USE_SSL']  = os.getenv('MAIL_USE_SSL', 'False') == 'True'
 app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
+
 mail = Mail(app)
 
 app.config['SECRET_KEY']              = os.getenv('SECRET_KEY')
